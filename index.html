@@ -126,20 +126,6 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
       <div class="bar"><p class="count" id="nCount" style="margin:0"></p><div class="tools"><button class="btn pri" type="button" data-nadd="1" id="nAdd" hidden>공지 쓰기</button></div></div>
       <div class="notes" id="notes"></div>
     </section>
-    <!-- 프로필 백업 탭: 현재 프로필 요약 + 내려받기 / 복원 -->
-    <section id="backupPane" hidden>
-      <div class="bk">
-        <h2>프로필 백업</h2>
-        <p class="hint" style="margin:0">프로필을 파일로 보관해 두었다가, 실수로 지웠을 때 되돌릴 수 있어요.</p>
-        <dl id="bkSum"></dl>
-        <label class="ck"><input type="checkbox" id="bkAll"> 공지·작품·분류도 함께 백업</label>
-        <div class="tools">
-          <button class="btn pri" type="button" id="bkDl">백업 파일 내려받기</button>
-          <button class="btn" type="button" id="bkUp">백업 파일로 복원</button>
-          <input type="file" id="bkFile" accept="application/json,.json" hidden>
-        </div>
-      </div>
-    </section>
     <section id="worksPane" hidden>
       <div class="bar">
         <div class="tabs" id="tabs" role="group" aria-label="분류"></div>
@@ -180,7 +166,7 @@ function seed(){
   return{
     profile:{name:"홍길동",role:"일러스트레이터 · 디지털 드로잉",bio:"일상의 작은 장면과 빛이 번지는 순간을 그립니다. 느리지만 꾸준하게 작업하는 것을 좋아해요.",loc:"경기도",tool:"Procreate, 수채, 펜",mail:"hello@example.com",ask:"일러스트, 표지, 굿즈",avatar:null},
     cats,
-    tabs:[{id:"n",name:"공지사항",type:"notice"},{id:"b",name:"프로필 백업",type:"backup"},{id:"w",name:"작품 게시판",type:"works"}],
+    tabs:[{id:"n",name:"공지사항",type:"notice"},{id:"w",name:"작품 게시판",type:"works"}],
     works:W.map((w,i)=>({id:"w"+i,title:w[0],cat:"c"+ci[i],date:w[1],desc:w[2],hue:w[3],img:null})),
     notices:[
       {id:"n0",pin:true,title:"작업 문의 안내",date:"2026-10-05",body:"일러스트, 표지, 굿즈 작업 문의는 왼쪽 프로필의 이메일로 보내 주세요. 원하는 용도와 일정, 예산을 함께 적어 주시면 답변이 빨라요."},
@@ -310,10 +296,10 @@ function rWorks(){
 }
 function renderAll(){
   let cur=S.tabs.find(t=>t.id===pane);
-  if(!cur||(cur.type==="backup"&&!admin)){cur=S.tabs.find(t=>t.type!=="backup");pane=cur.id}   // 없는 탭·로그아웃 상태의 백업 탭은 첫 탭으로
+  if(!cur){cur=S.tabs[0];pane=cur.id}   // 없는 탭이면 첫 탭으로
   const ty=cur.type;
-  $("#noticePane").hidden=ty!=="notice";$("#backupPane").hidden=ty!=="backup";$("#worksPane").hidden=ty!=="works";$("#pagePane").hidden=ty!=="page";
-  rNav();rProfile();rNotices();rWorks();rBackup();rPage(cur);
+  $("#noticePane").hidden=ty!=="notice";$("#worksPane").hidden=ty!=="works";$("#pagePane").hidden=ty!=="page";
+  rNav();rProfile();rNotices();rWorks();rPage(cur);
 }
 
 /* ---------- 편집 동작 ---------- */
@@ -353,11 +339,12 @@ async function delCat(id){
   S.works.forEach(w=>{if(w.cat===id)w.cat=rest[0].id});S.cats=rest;if(cat===id)cat="all";commit();
 }
 /* ---------- 메인 탭 편집 (이름 수정 · 순서 · 추가 · 삭제) ---------- */
-const BT={n:"notice",b:"backup",w:"works"};            // 기본 탭 3개 (삭제 불가, 이름·순서는 변경 가능)
+const BT={n:"notice",w:"works"};                        // 기본 탭 2개 (삭제 불가, 이름·순서는 변경 가능)
 function cleanTabs(a){
   const seen=new Set(),out=[];
   for(const t of Array.isArray(a)?a:[]){
-    if(!t||typeof t!=="object"||!ID_RE.test(t.id)||seen.has(t.id))continue;seen.add(t.id);
+    if(!t||typeof t!=="object"||!ID_RE.test(t.id)||t.id==="b"||seen.has(t.id))continue;   // 예전 백업 탭(b)은 버림
+   seen.add(t.id);
     const b=Object.hasOwn(BT,t.id);
     out.push(b?{id:t.id,name:cs(t.name,30)||"탭",type:BT[t.id]}:{id:t.id,name:cs(t.name,30)||"탭",type:"page",body:cs(t.body,2000)});
   }
@@ -365,7 +352,7 @@ function cleanTabs(a){
   return out}
 function fixTabs(){S.tabs=cleanTabs(S.tabs)}
 function rNav(){
-  const tabs=S.tabs.filter(t=>t.type!=="backup"||admin);
+  const tabs=S.tabs;
   $("#nav").innerHTML=tabs.map(t=>`<span class="nw"><button class="nv" type="button" role="tab" aria-selected="${t.id===pane}" data-tab="${t.id}">${esc(t.name)}</button>${edit?`<button class="mini" type="button" data-tl="${t.id}" title="왼쪽으로" aria-label="${esc(t.name)} 탭 왼쪽으로">◀</button><button class="mini" type="button" data-tr="${t.id}" title="오른쪽으로" aria-label="${esc(t.name)} 탭 오른쪽으로">▶</button><button class="mini" type="button" data-tren="${t.id}" title="이름 수정" aria-label="${esc(t.name)} 탭 이름 수정">✎</button>${t.type==="page"?`<button class="mini" type="button" data-tdel="${t.id}" title="탭 삭제" aria-label="${esc(t.name)} 탭 삭제">×</button>`:""}`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-tadd="1">+ 탭 추가</button>`:"");
 }
 function rPage(t){
@@ -434,69 +421,8 @@ $("#avL").addEventListener("click",e=>{if(!edit)e.preventDefault()});
 $("#avIn").onchange=async e=>{const f=e.target.files[0];if(!f||!edit)return;try{S.profile.avatar=await shrink(f,240);commit()}catch(x){msg("이미지를 불러오지 못했어요.")}};
 
 
-/* ================= '프로필 백업' 탭 ================= */
-const PKEYS=["name","role","bio","loc","tool","mail","ask"];                 // 백업 대상 글자 항목
-const IMG_RE=/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;     // 사진은 이 형식만 허용 (악성 코드 방지)
 const ID_RE=/^[\w-]{1,40}$/;                                                  // id는 영문·숫자·_·- 만 허용
 const cs=(v,n)=>typeof v==="string"?v.slice(0,n):"";                         // 문자열만 통과, 길이 제한
-
-/* 백업 파일의 프로필을 안전한 값만 남기고 정리 */
-function cleanProfile(p){
-  const o={};
-  for(const k of PKEYS)o[k]=cs(p[k],k==="bio"?2000:200);
-  o.avatar=typeof p.avatar==="string"&&IMG_RE.test(p.avatar)?p.avatar:null;
-  return o;
-}
-/* 백업 파일의 공지·작품·분류를 안전한 값만 남기고 정리 (잘못된 항목은 버림) */
-function cleanAll(d){
-  const arr=a=>Array.isArray(a)?a.filter(x=>x&&typeof x==="object"&&ID_RE.test(x.id)):[];
-  const cats=arr(d.cats).map(c=>({id:c.id,name:cs(c.name,80)||"분류"}));
-  if(!cats.length)return null;                                               // 분류가 없으면 게시판이 깨지므로 복원하지 않음
-  const ids=new Set(cats.map(c=>c.id));
-  return{
-    cats,
-    ...(Array.isArray(d.tabs)?{tabs:cleanTabs(d.tabs)}:{}),
-    works:arr(d.works).map(w=>({id:w.id,title:cs(w.title,80),cat:ids.has(w.cat)?w.cat:cats[0].id,date:cs(w.date,10),desc:cs(w.desc,2000),hue:Number(w.hue)||0,img:typeof w.img==="string"&&IMG_RE.test(w.img)?w.img:null})),
-    notices:arr(d.notices).map(n=>({id:n.id,pin:!!n.pin,title:cs(n.title,80),date:cs(n.date,10),body:cs(n.body,2000)}))
-  };
-}
-
-/* 현재 프로필 요약 표시 */
-function rBackup(){
-  const p=S.profile,L=[["이름","name"],["직업·소개","role"],["소개글","bio"],["지역","loc"],["도구","tool"],["연락","mail"],["작업 문의","ask"]];
-  $("#bkSum").innerHTML=L.map(([l,k])=>`<dt>${l}</dt><dd>${esc(p[k])||"-"}</dd>`).join("")+`<dt>프로필 사진</dt><dd>${p.avatar?"등록됨":"기본 그림"}</dd>`;
-}
-
-/* [내려받기] 현재 내용을 JSON 파일로 저장 */
-$("#bkDl").onclick=()=>{
-  const data={type:"profile-backup",version:1,savedAt:new Date().toISOString(),profile:S.profile};
-  if($("#bkAll").checked){data.cats=S.cats;data.works=S.works;data.notices=S.notices;data.tabs=S.tabs}   // 체크하면 공지·작품도 포함
-  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
-  const a=document.createElement("a");a.href=url;a.download=`profile-backup-${today()}.json`;
-  document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
-  msg("백업 파일을 내려받았어요.");
-};
-
-/* [복원] 버튼 → 파일 선택창 열기 */
-$("#bkUp").onclick=()=>$("#bkFile").click();
-
-/* 파일 선택 후: 검사 → 확인 창 → 적용 → GitHub에 저장 */
-$("#bkFile").onchange=async e=>{
-  const f=e.target.files[0];e.target.value="";                              // 같은 파일을 다시 고를 수 있게 초기화
-  if(!f||!admin)return;
-  if(f.size>10*1024*1024){msg("파일이 너무 커요. (최대 10MB)");return}
-  let d;try{d=JSON.parse(await f.text())}catch(x){msg("백업 파일을 읽을 수 없어요.");return}
-  if(!d||d.type!=="profile-backup"||!d.profile||typeof d.profile!=="object"){msg("프로필 백업 파일이 아니에요.");return}
-  const hasAll=Array.isArray(d.cats)&&Array.isArray(d.works)&&Array.isArray(d.notices);
-  const fs=[{t:"msg",v:`${d.savedAt?d.savedAt.slice(0,10)+" 백업으로 ":""}현재 프로필을 되돌려요. 계속할까요?`}];
-  if(hasAll)fs.push({k:"all",t:"check",l:"공지·작품·분류도 함께 복원 (현재 내용은 사라져요)"});
-  const v=await form("백업에서 복원",fs,"복원");
-  if(!v)return;
-  Object.assign(S.profile,cleanProfile(d.profile));                         // 프로필 복원
-  if(v.all){const c=cleanAll(d);if(c)Object.assign(S,c);else msg("분류 정보가 없어 공지·작품은 복원하지 않았어요.")}
-  cat="all";commit();                                                        // 화면 갱신 + GitHub 저장
-};
 
 renderAll();
 (async()=>{
