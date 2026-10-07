@@ -104,9 +104,11 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
     <dl id="pDl"></dl>
     <div class="adm" id="adm" hidden>
       <button class="btn pri" id="editT" type="button"></button>
+      <button class="btn" id="logoutB" type="button">로그아웃</button>
       <p class="hint" id="admHint"></p>
     </div>
     <button class="theme" id="theme" type="button">화면 모드 바꾸기</button>
+    <button class="theme" id="loginB" type="button" style="margin-left:6px">관리자 로그인</button>
   </aside>
 
   <main class="main">
@@ -137,10 +139,8 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
 <dialog id="fm"><form class="add" id="fmF" onsubmit="return false"></form></dialog>
 <div id="msg" hidden></div>
 
-<script type="application/json" id="state">{}</script>
 <script>
 const $=s=>document.querySelector(s);
-const TPL="<!DOCTYPE html>\n"+document.documentElement.outerHTML;
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,5);
 const today=()=>new Date().toISOString().slice(0,10);
@@ -167,7 +167,7 @@ function seed(){
       {id:"n2",pin:false,title:"10월 신작 업데이트 예정",date:"2026-09-29",body:"이번 달에는 가을 풍경 시리즈를 올릴 예정이에요."},
       {id:"n3",pin:false,title:"사이트를 새로 열었어요",date:"2026-09-20",body:"프로필과 작품을 한곳에 모았습니다."}]};
 }
-let S;try{S=Object.assign(seed(),JSON.parse($("#state").textContent||"{}"))}catch(e){S=seed()}
+let S=seed();
 let ui={};try{ui=JSON.parse(sessionStorage.getItem("ui")||"{}")}catch(e){}
 let admin=false,edit=!!ui.edit,pane=ui.pane||"n",cat=ui.cat||"all",view=ui.view||"grid";
 if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all";
@@ -175,17 +175,67 @@ function ss(){try{sessionStorage.setItem("ui",JSON.stringify({edit,pane,cat,view
 
 /* ---------- 알림 / 저장(게시) ---------- */
 let mt;function msg(t){const m=$("#msg");m.textContent=t;m.hidden=false;clearTimeout(mt);mt=setTimeout(()=>m.hidden=true,3500)}
-let st;function save(){clearTimeout(st);st=setTimeout(async()=>{
-  try{
-    const a=window.claude&&await claude.use("artifact");
-    if(!a){msg("미리보기에서는 저장되지 않아요. 게시된 페이지에서 편집해 주세요.");return}
-    ss();
-    const j=JSON.stringify(S).replace(/</g,"\\u003c");
-    await a.publish(TPL.replace(/(<script type="application\/json" id="state">)[\s\S]*?(<\/script>)/,(m,a1,a2)=>a1+j+a2));
-  }catch(e){
-    if(e&&e.code==="conflict")return;
-    msg(e&&(e.code==="not_writer"||e.code==="not_granted")?"저장 권한이 없어요.":"저장하지 못했어요. 잠시 후 다시 시도해 주세요.");
-  }},500)}
+/* ---------- GitHub 연결 (data.json 을 저장소에 커밋) ---------- */
+const DATA_PATH="data.json",API="https://api.github.com";
+let gh=null,sha=null;
+function guessRepo(){const h=location.hostname,p=location.pathname.split("/").filter(Boolean);
+  if(h.endsWith(".github.io"))return{owner:h.split(".")[0],repo:p[0]&&!/\.html?$/.test(p[0])?p[0]:h};
+  return{owner:"",repo:""}}
+const hdr=x=>Object.assign({"Authorization":"Bearer "+gh.token,"X-GitHub-Api-Version":"2022-11-28"},x||{});
+const fileUrl=()=>`${API}/repos/${gh.owner}/${gh.repo}/contents/${DATA_PATH}`;
+const refQ=()=>gh.branch?`?ref=${encodeURIComponent(gh.branch)}`:"";
+function b64(t){const u=new TextEncoder().encode(t);let b="";for(let i=0;i<u.length;i+=0x8000)b+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(b)}
+function cfgGet(){try{return JSON.parse(localStorage.getItem("gh")||sessionStorage.getItem("gh")||"null")}catch(e){return null}}
+function cfgSet(c,keep){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh");(keep?localStorage:sessionStorage).setItem("gh",JSON.stringify(c))}catch(e){}}
+function cfgClear(){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh")}catch(e){}}
+function applyData(d){S=Object.assign(seed(),d);if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
+async function verify(c){
+  const r=await fetch(`${API}/repos/${c.owner}/${c.repo}`,{headers:{"Authorization":"Bearer "+c.token,"X-GitHub-Api-Version":"2022-11-28"}});
+  if(!r.ok)return false;const j=await r.json();return !!(j.permissions&&(j.permissions.push||j.permissions.admin))}
+async function ghLoad(){
+  const r=await fetch(fileUrl()+refQ(),{headers:hdr(),cache:"no-store"});
+  if(r.status===404){sha=null;return null}
+  if(!r.ok)throw new Error("load "+r.status);
+  sha=(await r.json()).sha;
+  const raw=await fetch(fileUrl()+refQ(),{headers:hdr({"Accept":"application/vnd.github.raw+json"}),cache:"no-store"});
+  if(!raw.ok)throw new Error("raw "+raw.status);
+  return JSON.parse(await raw.text())}
+async function ghSave(retry){
+  const body={message:"공지·게시판 내용 업데이트",content:b64(JSON.stringify(S))};
+  if(sha)body.sha=sha;if(gh.branch)body.branch=gh.branch;
+  const r=await fetch(fileUrl(),{method:"PUT",headers:hdr({"Content-Type":"application/json"}),body:JSON.stringify(body)});
+  if((r.status===409||r.status===422)&&!retry){await ghLoad();return ghSave(true)}
+  if([401,403,404].includes(r.status))throw Object.assign(new Error("auth"),{code:"auth"});
+  if(!r.ok)throw new Error("save "+r.status);
+  sha=(await r.json()).content.sha}
+
+/* ---------- 저장 ---------- */
+let st,q=Promise.resolve();
+function save(){
+  if(!admin||!gh){msg("관리자로 로그인해야 저장할 수 있어요.");return}
+  clearTimeout(st);st=setTimeout(()=>{q=q.then(async()=>{
+    try{msg("저장 중…");await ghSave();ss();msg("저장했어요. 방문자 화면에는 1~2분 뒤 반영돼요.")}
+    catch(e){msg(e.code==="auth"?"저장 권한이 없어요. 토큰 권한(Contents: Read and write)을 확인하고 다시 로그인해 주세요.":"저장하지 못했어요. 잠시 후 다시 시도해 주세요.")}})},500)}
+async function login(){
+  const g=guessRepo();let p={owner:g.owner,repo:g.repo,branch:"",token:"",keep:false};
+  for(;;){
+    const v=await form("관리자 로그인",[
+      {t:"msg",v:"GitHub에서 이 저장소 전용 토큰(Fine-grained token, 권한: Contents → Read and write)을 만들어 붙여넣어 주세요. 저장소에 쓰기 권한이 있는 본인만 로그인할 수 있어요."},
+      {k:"owner",l:"GitHub 아이디",t:"text",v:p.owner,req:1},
+      {k:"repo",l:"저장소 이름",t:"text",v:p.repo,req:1},
+      {k:"branch",l:"브랜치 (비우면 기본 브랜치)",t:"text",v:p.branch},
+      {k:"token",l:"토큰",t:"password",v:p.token,req:1},
+      {k:"keep",t:"check",l:"이 기기에서 로그인 유지 (내 기기에서만 켜세요)",v:p.keep}],"로그인");
+    if(!v)return;p=v;msg("확인 중…");
+    try{
+      const c={owner:v.owner,repo:v.repo,branch:v.branch,token:v.token};
+      if(await verify(c)){
+        gh=c;cfgSet(c,v.keep);admin=true;
+        try{const d=await ghLoad();if(d)applyData(d)}catch(e){}
+        renderAll();msg("로그인했어요.");return}
+      msg("저장소를 찾을 수 없거나 쓰기 권한이 없어요. 입력을 확인해 주세요.")
+    }catch(e){msg("GitHub에 연결하지 못했어요.")}}}
+function logout(){cfgClear();gh=null;sha=null;admin=false;edit=false;ss();renderAll();msg("로그아웃했어요.")}
 function commit(){renderAll();save()}
 
 /* ---------- 입력 폼 ---------- */
@@ -195,7 +245,7 @@ async function shrink(file,max){
   return c.toDataURL("image/jpeg",.82)}
 function form(title,fs,ok="저장"){return new Promise(res=>{
   const d=$("#fm"),f=$("#fmF");
-  f.innerHTML=`<h2>${title}</h2>`+fs.map((x,i)=>x.t==="msg"?`<p>${esc(x.v)}</p>`:x.t==="check"?`<label class="ck"><input type="checkbox" id="f${i}" ${x.v?"checked":""}> ${x.l}</label>`:`<label>${x.l}${x.t==="area"?`<textarea id="f${i}" rows="5" maxlength="2000">${esc(x.v)}</textarea>`:x.t==="select"?`<select id="f${i}">${x.o.map(o=>`<option value="${esc(o[0])}"${o[0]===x.v?" selected":""}>${esc(o[1])}</option>`).join("")}</select>`:x.t==="file"?`<input id="f${i}" type="file" accept="image/*">`:`<input id="f${i}" type="${x.t}" value="${esc(x.v)}" maxlength="80">`}</label>`).join("")+`<div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn ${ok==="삭제"?"dng":"pri"}" id="fOk">${ok}</button></div>`;
+  f.innerHTML=`<h2>${title}</h2>`+fs.map((x,i)=>x.t==="msg"?`<p>${esc(x.v)}</p>`:x.t==="check"?`<label class="ck"><input type="checkbox" id="f${i}" ${x.v?"checked":""}> ${x.l}</label>`:`<label>${x.l}${x.t==="area"?`<textarea id="f${i}" rows="5" maxlength="2000">${esc(x.v)}</textarea>`:x.t==="select"?`<select id="f${i}">${x.o.map(o=>`<option value="${esc(o[0])}"${o[0]===x.v?" selected":""}>${esc(o[1])}</option>`).join("")}</select>`:x.t==="file"?`<input id="f${i}" type="file" accept="image/*">`:`<input id="f${i}" type="${x.t}" value="${esc(x.v)}" maxlength="${x.t==="password"?300:80}" autocomplete="off">`}</label>`).join("")+`<div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn ${ok==="삭제"?"dng":"pri"}" id="fOk">${ok}</button></div>`;
   d.onclose=()=>res(null);
   $("#fX").onclick=()=>d.close();
   $("#fOk").onclick=async()=>{const o={};
@@ -216,9 +266,9 @@ function rProfile(){
   for(const [id,k] of [["pName","name"],["pRole","role"],["pBio","bio"]]){const e=$("#"+id);e.textContent=p[k];e.contentEditable=edit?"true":"false"}
   $("#pDl").innerHTML=LBL.map(([k,l])=>`<dt>${l}</dt><dd data-k="${k}" contenteditable="${edit}" spellcheck="false">${esc(p[k])}</dd>`).join("");
   $("#av").innerHTML=p.avatar?`<img src="${p.avatar}" alt="프로필 사진">`:art(99,215);
-  $("#adm").hidden=!admin;
+  $("#adm").hidden=!admin;$("#loginB").hidden=admin;
   $("#editT").textContent=edit?"편집 모드 끄기":"편집 모드 켜기";
-  $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 바꾼 내용은 바로 사이트에 게시됩니다.":"관리자만 보이는 메뉴예요.";
+  $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 저장하면 GitHub에 반영되고, 방문자 화면에는 1~2분 뒤 보여요.":"관리자만 보이는 메뉴예요.";
 }
 function rNotices(){
   const ns=[...S.notices].sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
@@ -299,6 +349,8 @@ document.addEventListener("click",e=>{
   else if(d.ren)renCat(d.ren);
   else if(d.dc)delCat(d.dc);
   else if(t.id==="cls")$("#dlg").close();
+  else if(t.id==="loginB")login();
+  else if(t.id==="logoutB")logout();
 });
 $("#dlg").addEventListener("click",e=>{if(e.target===e.currentTarget)e.currentTarget.close()});
 $("#nvN").onclick=()=>{pane="n";ss();renderAll()};
@@ -314,9 +366,16 @@ $("#avL").addEventListener("click",e=>{if(!edit)e.preventDefault()});
 $("#avIn").onchange=async e=>{const f=e.target.files[0];if(!f||!edit)return;try{S.profile.avatar=await shrink(f,240);commit()}catch(x){msg("이미지를 불러오지 못했어요.")}};
 
 renderAll();
-/* 관리자 확인: 편집 권한이 있는 사람에게만 편집 메뉴가 보여요 */
-(async()=>{try{const u=window.claude&&await claude.use("user");if(u)admin=!!(await u.canEdit()||await u.isOwner())}catch(e){}
-  if(!admin)edit=false;renderAll()})();
+(async()=>{
+  /* 방문자 화면: 저장소의 data.json 을 불러옵니다 (없으면 기본 내용) */
+  try{const r=await fetch(DATA_PATH+"?t="+Date.now(),{cache:"no-store"});if(r.ok)applyData(await r.json())}catch(e){}
+  renderAll();
+  /* 저장된 로그인이 있으면 자동으로 관리자 복구 */
+  const c=cfgGet();
+  if(c){try{if(await verify(c)){gh=c;admin=true;const d=await ghLoad();if(d)applyData(d)}else cfgClear()}catch(e){}}
+  if(!admin)edit=false;
+  renderAll();
+})();
 </script>
 </body>
 </html>
