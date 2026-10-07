@@ -74,7 +74,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .notes summary::-webkit-details-marker{display:none}
 .notes summary:hover{background:color-mix(in srgb,var(--hi) 30%,transparent)}
 .d{color:var(--mute);font-size:13px}
-.tag{text-align:center;font-size:12.5px;border:1px solid var(--line);border-radius:3px;color:var(--mute)}
+.tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;text-align:center;font-size:12.5px;border:1px solid var(--line);border-radius:3px;color:var(--mute)}
 .tag.pin{background:var(--hi);color:var(--ink);border-color:transparent}
 .nb{padding:4px 14px 16px 88px}
 .nb p{margin:0;max-width:62ch;white-space:pre-wrap}
@@ -124,6 +124,7 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
     <section id="pagePane" hidden></section>
     <section id="noticePane">
       <div class="bar"><p class="count" id="nCount" style="margin:0"></p><div class="tools"><button class="btn pri" type="button" data-nadd="1" id="nAdd" hidden>공지 쓰기</button></div></div>
+      <div class="tabs" id="nTabs" role="group" aria-label="공지 분류" style="margin-bottom:12px"></div>
       <div class="notes" id="notes"></div>
     </section>
     <section id="worksPane" hidden>
@@ -166,6 +167,7 @@ function seed(){
   return{
     profile:{name:"홍길동",role:"일러스트레이터 · 디지털 드로잉",bio:"일상의 작은 장면과 빛이 번지는 순간을 그립니다. 느리지만 꾸준하게 작업하는 것을 좋아해요.",loc:"경기도",tool:"Procreate, 수채, 펜",mail:"hello@example.com",ask:"일러스트, 표지, 굿즈",avatar:null},
     cats,
+    ncats:[],
     tabs:[{id:"n",name:"공지사항",type:"notice"},{id:"w",name:"작품 게시판",type:"works"}],
     works:W.map((w,i)=>({id:"w"+i,title:w[0],cat:"c"+ci[i],date:w[1],desc:w[2],hue:w[3],img:null})),
     notices:[
@@ -176,9 +178,9 @@ function seed(){
 }
 let S=seed();
 let ui={};try{ui=JSON.parse(sessionStorage.getItem("ui")||"{}")}catch(e){}
-let admin=false,edit=!!ui.edit,pane=ui.pane||"n",cat=ui.cat||"all",view=ui.view||"grid";
+let admin=false,edit=!!ui.edit,pane=ui.pane||"n",cat=ui.cat||"all",view=ui.view||"grid",ncat=ui.ncat||"all";
 if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all";
-function ss(){try{sessionStorage.setItem("ui",JSON.stringify({edit,pane,cat,view}))}catch(e){}}
+function ss(){try{sessionStorage.setItem("ui",JSON.stringify({edit,pane,cat,view,ncat}))}catch(e){}}
 
 /* ---------- 알림 / 저장(게시) ---------- */
 let mt;function msg(t){const m=$("#msg");m.textContent=t;m.hidden=false;clearTimeout(mt);mt=setTimeout(()=>m.hidden=true,3500)}
@@ -195,7 +197,7 @@ function b64(t){const u=new TextEncoder().encode(t);let b="";for(let i=0;i<u.len
 function cfgGet(){try{return JSON.parse(localStorage.getItem("gh")||sessionStorage.getItem("gh")||"null")}catch(e){return null}}
 function cfgSet(c,keep){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh");(keep?localStorage:sessionStorage).setItem("gh",JSON.stringify(c))}catch(e){}}
 function cfgClear(){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh")}catch(e){}}
-function applyData(d){S=Object.assign(seed(),d);fixTabs();if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
+function applyData(d){S=Object.assign(seed(),d);fixTabs();S.ncats=cleanNc(S.ncats);if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
 async function verify(c){
   const r=await fetch(`${API}/repos/${c.owner}/${c.repo}`,{headers:{"Authorization":"Bearer "+c.token,"X-GitHub-Api-Version":"2022-11-28"}});
   if(!r.ok)return false;const j=await r.json();return !!(j.permissions&&(j.permissions.push||j.permissions.admin))}
@@ -278,10 +280,13 @@ function rProfile(){
   $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 저장하면 GitHub에 반영되고, 방문자 화면에는 1~2분 뒤 보여요.":"관리자만 보이는 메뉴예요.";
 }
 function rNotices(){
-  const ns=[...S.notices].sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
+  if(ncat!=="all"&&!S.ncats.some(c=>c.id===ncat))ncat="all";
+  const nt=$("#nTabs");nt.hidden=!S.ncats.length&&!edit;
+  nt.innerHTML=[{id:"all",name:"전체"},...S.ncats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===ncat}" data-nc="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-nrenc="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 분류 이름 수정">✎</button><button class="mini" type="button" data-ndelc="${c.id}" title="분류 삭제" aria-label="${esc(c.name)} 분류 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-naddc="1">+ 분류 추가</button>`:"");
+  const ns=S.notices.filter(n=>ncat==="all"||n.cat===ncat).sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
   $("#nCount").textContent=`공지 ${ns.length}개`;
   $("#nAdd").hidden=!edit;
-  $("#notes").innerHTML=ns.length?ns.map(n=>`<details><summary><span class="tag${n.pin?" pin":""}">${n.pin?"중요":"공지"}</span><span>${esc(n.title)}</span><span class="d">${esc(n.date)}</span></summary><div class="nb"><p>${esc(n.body)}</p>${edit?`<div class="acts"><button class="btn dng" type="button" data-ndel="${n.id}">삭제</button><button class="btn" type="button" data-ned="${n.id}">수정</button></div>`:""}</div></details>`).join(""):`<div class="empty">등록된 공지가 없어요.${edit?"<br>‘공지 쓰기’로 첫 공지를 올려 보세요.":""}</div>`;
+  $("#notes").innerHTML=ns.length?ns.map(n=>`<details><summary><span class="tag${n.pin?" pin":""}">${n.pin?"중요":esc(ncName(n.cat))}</span><span>${esc(n.title)}</span><span class="d">${esc(n.date)}</span></summary><div class="nb"><p>${esc(n.body)}</p>${edit?`<div class="acts"><button class="btn dng" type="button" data-ndel="${n.id}">삭제</button><button class="btn" type="button" data-ned="${n.id}">수정</button></div>`:""}</div></details>`).join(""):`<div class="empty">등록된 공지가 없어요.${edit?"<br>‘공지 쓰기’로 첫 공지를 올려 보세요.":""}</div>`;
 }
 function rWorks(){
   $("#tabs").innerHTML=[{id:"all",name:"전체"},...S.cats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===cat}" data-c="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-ren="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 탭 이름 수정">✎</button><button class="mini" type="button" data-dc="${c.id}" title="탭 삭제" aria-label="${esc(c.name)} 탭 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-addc="1">+ 탭 추가</button>`:"");
@@ -305,7 +310,7 @@ function renderAll(){
 /* ---------- 편집 동작 ---------- */
 async function editNotice(id){
   const n=id?S.notices.find(x=>x.id===id):null;
-  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"area",v:n?.body}]);
+  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"cat",l:"분류",t:"select",o:[["","미분류"],...S.ncats.map(c=>[c.id,c.name])],v:n?.cat||(!n&&ncat!=="all"?ncat:"")},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"area",v:n?.body}]);
   if(!v)return;
   if(n)Object.assign(n,v);else S.notices.push({id:uid(),...v});
   commit();
@@ -337,6 +342,25 @@ async function delCat(id){
   const v=await form("탭 삭제",[{t:"msg",v:n?`‘${c.name}’ 탭을 삭제하면 작품 ${n}개는 ‘${rest[0].name}’ 탭으로 옮겨져요.`:`‘${c.name}’ 탭을 삭제할까요?`}],"삭제");
   if(!v)return;
   S.works.forEach(w=>{if(w.cat===id)w.cat=rest[0].id});S.cats=rest;if(cat===id)cat="all";commit();
+}
+/* ---------- 공지 분류 (추가 · 이름 수정 · 삭제) ---------- */
+const ncName=id=>(S.ncats.find(c=>c.id===id)||{name:"공지"}).name;
+function cleanNc(a){const seen=new Set();return(Array.isArray(a)?a:[]).filter(c=>c&&typeof c==="object"&&ID_RE.test(c.id)&&!seen.has(c.id)&&seen.add(c.id)).map(c=>({id:c.id,name:cs(c.name,40)||"분류"}))}
+async function addNCat(){
+  const v=await form("공지 분류 추가",[{k:"n",l:"분류 이름",t:"text",req:1}],"추가");
+  if(!v)return;const c={id:uid(),name:v.n.slice(0,40)};S.ncats.push(c);ncat=c.id;commit();
+}
+async function renNCat(id){
+  const c=S.ncats.find(x=>x.id===id);if(!c)return;
+  const v=await form("분류 이름 수정",[{k:"n",l:"분류 이름",t:"text",v:c.name,req:1}]);
+  if(!v)return;c.name=v.n.slice(0,40);commit();
+}
+async function delNCat(id){
+  const c=S.ncats.find(x=>x.id===id);if(!c)return;
+  const n=S.notices.filter(x=>x.cat===id).length;
+  const v=await form("분류 삭제",[{t:"msg",v:n?`‘${c.name}’ 분류를 삭제하면 공지 ${n}개는 ‘미분류’가 돼요. (공지는 삭제되지 않아요)`:`‘${c.name}’ 분류를 삭제할까요?`}],"삭제");
+  if(!v)return;
+  S.notices.forEach(x=>{if(x.cat===id)x.cat=""});S.ncats=S.ncats.filter(x=>x.id!==id);if(ncat===id)ncat="all";commit();
 }
 /* ---------- 메인 탭 편집 (이름 수정 · 순서 · 추가 · 삭제) ---------- */
 const BT={n:"notice",w:"works"};                        // 기본 탭 2개 (삭제 불가, 이름·순서는 변경 가능)
@@ -388,6 +412,10 @@ function openWork(id){
 document.addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;const d=t.dataset;
   if(d.tab){pane=d.tab;ss();renderAll()}
+  else if(d.nc){ncat=d.nc;ss();rNotices()}
+  else if(d.naddc)addNCat();
+  else if(d.nrenc)renNCat(d.nrenc);
+  else if(d.ndelc)delNCat(d.ndelc);
   else if(d.tl)moveTab(d.tl,-1);
   else if(d.tr)moveTab(d.tr,1);
   else if(d.tren)renTab(d.tren);
