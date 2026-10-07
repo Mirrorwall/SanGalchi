@@ -36,6 +36,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}
 .nv{background:none;border:0;border-bottom:3px solid transparent;padding:8px 16px;cursor:pointer;font-size:16px;font-weight:500;color:var(--mute);margin-bottom:-1px}
 .nv[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--acc)}
+.nav{flex-wrap:wrap}.nw{display:inline-flex;align-items:center;margin-bottom:-1px}.nav>.btn{align-self:center;margin:0 0 4px 6px}
+.pg{white-space:pre-wrap;margin:14px 0 0}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .tw{display:inline-flex;align-items:center;gap:2px}
@@ -76,6 +78,12 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tag.pin{background:var(--hi);color:var(--ink);border-color:transparent}
 .nb{padding:4px 14px 16px 88px}
 .nb p{margin:0;max-width:62ch;white-space:pre-wrap}
+/* 프로필 백업 탭 */
+.bk{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:20px 22px}
+.bk h2{font-size:20px;margin-bottom:4px}
+.bk dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px;margin:14px 0 18px}
+.bk dt{color:var(--mute)}.bk dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.bk label.ck{display:flex;gap:8px;align-items:center;margin:0 0 14px}
 dialog{border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);padding:0;max-width:min(680px,94vw);width:100%}
 dialog::backdrop{background:rgba(10,14,24,.6)}
 .dv{aspect-ratio:4/3;background:var(--bg)}.dv svg,.dv img{width:100%;height:100%;object-fit:contain;display:block}
@@ -112,13 +120,25 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
   </aside>
 
   <main class="main">
-    <div class="nav" role="tablist">
-      <button class="nv" type="button" role="tab" id="nvN">공지사항</button>
-      <button class="nv" type="button" role="tab" id="nvW">작품 게시판</button>
-    </div>
+    <div class="nav" role="tablist" id="nav"></div>
+    <section id="pagePane" hidden></section>
     <section id="noticePane">
       <div class="bar"><p class="count" id="nCount" style="margin:0"></p><div class="tools"><button class="btn pri" type="button" data-nadd="1" id="nAdd" hidden>공지 쓰기</button></div></div>
       <div class="notes" id="notes"></div>
+    </section>
+    <!-- 프로필 백업 탭: 현재 프로필 요약 + 내려받기 / 복원 -->
+    <section id="backupPane" hidden>
+      <div class="bk">
+        <h2>프로필 백업</h2>
+        <p class="hint" style="margin:0">프로필을 파일로 보관해 두었다가, 실수로 지웠을 때 되돌릴 수 있어요.</p>
+        <dl id="bkSum"></dl>
+        <label class="ck"><input type="checkbox" id="bkAll"> 공지·작품·분류도 함께 백업</label>
+        <div class="tools">
+          <button class="btn pri" type="button" id="bkDl">백업 파일 내려받기</button>
+          <button class="btn" type="button" id="bkUp">백업 파일로 복원</button>
+          <input type="file" id="bkFile" accept="application/json,.json" hidden>
+        </div>
+      </div>
     </section>
     <section id="worksPane" hidden>
       <div class="bar">
@@ -160,6 +180,7 @@ function seed(){
   return{
     profile:{name:"홍길동",role:"일러스트레이터 · 디지털 드로잉",bio:"일상의 작은 장면과 빛이 번지는 순간을 그립니다. 느리지만 꾸준하게 작업하는 것을 좋아해요.",loc:"경기도",tool:"Procreate, 수채, 펜",mail:"hello@example.com",ask:"일러스트, 표지, 굿즈",avatar:null},
     cats,
+    tabs:[{id:"n",name:"공지사항",type:"notice"},{id:"b",name:"프로필 백업",type:"backup"},{id:"w",name:"작품 게시판",type:"works"}],
     works:W.map((w,i)=>({id:"w"+i,title:w[0],cat:"c"+ci[i],date:w[1],desc:w[2],hue:w[3],img:null})),
     notices:[
       {id:"n0",pin:true,title:"작업 문의 안내",date:"2026-10-05",body:"일러스트, 표지, 굿즈 작업 문의는 왼쪽 프로필의 이메일로 보내 주세요. 원하는 용도와 일정, 예산을 함께 적어 주시면 답변이 빨라요."},
@@ -188,7 +209,7 @@ function b64(t){const u=new TextEncoder().encode(t);let b="";for(let i=0;i<u.len
 function cfgGet(){try{return JSON.parse(localStorage.getItem("gh")||sessionStorage.getItem("gh")||"null")}catch(e){return null}}
 function cfgSet(c,keep){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh");(keep?localStorage:sessionStorage).setItem("gh",JSON.stringify(c))}catch(e){}}
 function cfgClear(){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh")}catch(e){}}
-function applyData(d){S=Object.assign(seed(),d);if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
+function applyData(d){S=Object.assign(seed(),d);fixTabs();if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
 async function verify(c){
   const r=await fetch(`${API}/repos/${c.owner}/${c.repo}`,{headers:{"Authorization":"Bearer "+c.token,"X-GitHub-Api-Version":"2022-11-28"}});
   if(!r.ok)return false;const j=await r.json();return !!(j.permissions&&(j.permissions.push||j.permissions.admin))}
@@ -288,9 +309,11 @@ function rWorks(){
    :`<div class="list"><div class="row h"><span>번호</span><span>제목</span><span>분류</span><span>날짜</span></div>${list.map((w,i)=>`<button class="row" type="button" data-id="${w.id}"><span>${list.length-i}</span><span>${esc(w.title)}</span><span><i class="pill">${esc(catName(w.cat))}</i></span><span>${esc(w.date)}</span></button>`).join("")}</div>`;
 }
 function renderAll(){
-  $("#noticePane").hidden=pane!=="n";$("#worksPane").hidden=pane!=="w";
-  $("#nvN").setAttribute("aria-selected",pane==="n");$("#nvW").setAttribute("aria-selected",pane==="w");
-  rProfile();rNotices();rWorks();
+  let cur=S.tabs.find(t=>t.id===pane);
+  if(!cur||(cur.type==="backup"&&!admin)){cur=S.tabs.find(t=>t.type!=="backup");pane=cur.id}   // 없는 탭·로그아웃 상태의 백업 탭은 첫 탭으로
+  const ty=cur.type;
+  $("#noticePane").hidden=ty!=="notice";$("#backupPane").hidden=ty!=="backup";$("#worksPane").hidden=ty!=="works";$("#pagePane").hidden=ty!=="page";
+  rNav();rProfile();rNotices();rWorks();rBackup();rPage(cur);
 }
 
 /* ---------- 편집 동작 ---------- */
@@ -329,6 +352,46 @@ async function delCat(id){
   if(!v)return;
   S.works.forEach(w=>{if(w.cat===id)w.cat=rest[0].id});S.cats=rest;if(cat===id)cat="all";commit();
 }
+/* ---------- 메인 탭 편집 (이름 수정 · 순서 · 추가 · 삭제) ---------- */
+const BT={n:"notice",b:"backup",w:"works"};            // 기본 탭 3개 (삭제 불가, 이름·순서는 변경 가능)
+function cleanTabs(a){
+  const seen=new Set(),out=[];
+  for(const t of Array.isArray(a)?a:[]){
+    if(!t||typeof t!=="object"||!ID_RE.test(t.id)||seen.has(t.id))continue;seen.add(t.id);
+    const b=Object.hasOwn(BT,t.id);
+    out.push(b?{id:t.id,name:cs(t.name,30)||"탭",type:BT[t.id]}:{id:t.id,name:cs(t.name,30)||"탭",type:"page",body:cs(t.body,2000)});
+  }
+  for(const d of seed().tabs)if(!seen.has(d.id))out.push(d);   // 빠진 기본 탭은 복구
+  return out}
+function fixTabs(){S.tabs=cleanTabs(S.tabs)}
+function rNav(){
+  const tabs=S.tabs.filter(t=>t.type!=="backup"||admin);
+  $("#nav").innerHTML=tabs.map(t=>`<span class="nw"><button class="nv" type="button" role="tab" aria-selected="${t.id===pane}" data-tab="${t.id}">${esc(t.name)}</button>${edit?`<button class="mini" type="button" data-tl="${t.id}" title="왼쪽으로" aria-label="${esc(t.name)} 탭 왼쪽으로">◀</button><button class="mini" type="button" data-tr="${t.id}" title="오른쪽으로" aria-label="${esc(t.name)} 탭 오른쪽으로">▶</button><button class="mini" type="button" data-tren="${t.id}" title="이름 수정" aria-label="${esc(t.name)} 탭 이름 수정">✎</button>${t.type==="page"?`<button class="mini" type="button" data-tdel="${t.id}" title="탭 삭제" aria-label="${esc(t.name)} 탭 삭제">×</button>`:""}`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-tadd="1">+ 탭 추가</button>`:"");
+}
+function rPage(t){
+  if(t.type!=="page")return;
+  $("#pagePane").innerHTML=`<div class="bk"><h2>${esc(t.name)}</h2><p class="pg">${t.body?esc(t.body):`<span class="hint">아직 내용이 없어요.${edit?" 아래 ‘내용 수정’으로 써 보세요.":""}</span>`}</p>${edit?`<div class="acts"><button class="btn pri" type="button" data-pedit="${t.id}">내용 수정</button></div>`:""}</div>`;
+}
+function moveTab(id,dir){const a=S.tabs,i=a.findIndex(t=>t.id===id),j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];commit()}
+async function renTab(id){
+  const t=S.tabs.find(x=>x.id===id);if(!t)return;
+  const v=await form("탭 이름 수정",[{k:"n",l:"탭 이름",t:"text",v:t.name,req:1}]);
+  if(!v)return;t.name=v.n.slice(0,30);commit();
+}
+async function addTab(){
+  const v=await form("탭 추가",[{t:"msg",v:"자유롭게 글을 쓸 수 있는 새 탭이 만들어져요."},{k:"n",l:"탭 이름",t:"text",req:1}],"추가");
+  if(!v)return;const t={id:uid(),name:v.n.slice(0,30),type:"page",body:""};S.tabs.push(t);pane=t.id;commit();
+}
+async function editPage(id){
+  const t=S.tabs.find(x=>x.id===id);if(!t)return;
+  const v=await form(`‘${t.name}’ 내용 수정`,[{k:"body",l:"내용",t:"area",v:t.body}]);
+  if(!v)return;t.body=v.body;commit();
+}
+async function delTab(id){
+  const t=S.tabs.find(x=>x.id===id);if(!t||t.type!=="page")return;
+  const v=await form("탭 삭제",[{t:"msg",v:`‘${t.name}’ 탭과 그 안의 내용이 삭제돼요. 삭제할까요?`}],"삭제");
+  if(!v)return;S.tabs=S.tabs.filter(x=>x.id!==id);if(pane===id)pane="n";commit();
+}
 function openWork(id){
   const w=S.works.find(x=>x.id===id);if(!w)return;
   $("#dlgBody").innerHTML=`<div class="dv">${th(w)}</div><div class="db"><h2>${esc(w.title)}</h2><div class="meta">${esc(catName(w.cat))} · ${esc(w.date)}</div><p>${esc(w.desc||"설명이 없어요.")}</p><div class="acts">${edit?`<button class="btn dng" type="button" data-wdel="${w.id}">삭제</button><button class="btn" type="button" data-wed="${w.id}">수정</button>`:""}<button class="btn pri" type="button" id="cls">닫기</button></div></div>`;
@@ -337,7 +400,14 @@ function openWork(id){
 
 document.addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;const d=t.dataset;
-  if(d.c){cat=d.c;ss();rWorks()}
+  if(d.tab){pane=d.tab;ss();renderAll()}
+  else if(d.tl)moveTab(d.tl,-1);
+  else if(d.tr)moveTab(d.tr,1);
+  else if(d.tren)renTab(d.tren);
+  else if(d.tadd)addTab();
+  else if(d.tdel)delTab(d.tdel);
+  else if(d.pedit)editPage(d.pedit);
+  else if(d.c){cat=d.c;ss();rWorks()}
   else if(d.id)openWork(d.id);
   else if(d.nadd)editNotice();
   else if(d.ned)editNotice(d.ned);
@@ -353,8 +423,6 @@ document.addEventListener("click",e=>{
   else if(t.id==="logoutB")logout();
 });
 $("#dlg").addEventListener("click",e=>{if(e.target===e.currentTarget)e.currentTarget.close()});
-$("#nvN").onclick=()=>{pane="n";ss();renderAll()};
-$("#nvW").onclick=()=>{pane="w";ss();renderAll()};
 $("#vGrid").onclick=()=>{view="grid";ss();rWorks()};
 $("#vList").onclick=()=>{view="list";ss();rWorks()};
 $("#editT").onclick=()=>{edit=!edit;ss();renderAll()};
@@ -364,6 +432,71 @@ document.addEventListener("focusout",e=>{const k=e.target.dataset&&e.target.data
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.k&&e.target.id!=="pBio"){e.preventDefault();e.target.blur()}});
 $("#avL").addEventListener("click",e=>{if(!edit)e.preventDefault()});
 $("#avIn").onchange=async e=>{const f=e.target.files[0];if(!f||!edit)return;try{S.profile.avatar=await shrink(f,240);commit()}catch(x){msg("이미지를 불러오지 못했어요.")}};
+
+
+/* ================= '프로필 백업' 탭 ================= */
+const PKEYS=["name","role","bio","loc","tool","mail","ask"];                 // 백업 대상 글자 항목
+const IMG_RE=/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/;     // 사진은 이 형식만 허용 (악성 코드 방지)
+const ID_RE=/^[\w-]{1,40}$/;                                                  // id는 영문·숫자·_·- 만 허용
+const cs=(v,n)=>typeof v==="string"?v.slice(0,n):"";                         // 문자열만 통과, 길이 제한
+
+/* 백업 파일의 프로필을 안전한 값만 남기고 정리 */
+function cleanProfile(p){
+  const o={};
+  for(const k of PKEYS)o[k]=cs(p[k],k==="bio"?2000:200);
+  o.avatar=typeof p.avatar==="string"&&IMG_RE.test(p.avatar)?p.avatar:null;
+  return o;
+}
+/* 백업 파일의 공지·작품·분류를 안전한 값만 남기고 정리 (잘못된 항목은 버림) */
+function cleanAll(d){
+  const arr=a=>Array.isArray(a)?a.filter(x=>x&&typeof x==="object"&&ID_RE.test(x.id)):[];
+  const cats=arr(d.cats).map(c=>({id:c.id,name:cs(c.name,80)||"분류"}));
+  if(!cats.length)return null;                                               // 분류가 없으면 게시판이 깨지므로 복원하지 않음
+  const ids=new Set(cats.map(c=>c.id));
+  return{
+    cats,
+    ...(Array.isArray(d.tabs)?{tabs:cleanTabs(d.tabs)}:{}),
+    works:arr(d.works).map(w=>({id:w.id,title:cs(w.title,80),cat:ids.has(w.cat)?w.cat:cats[0].id,date:cs(w.date,10),desc:cs(w.desc,2000),hue:Number(w.hue)||0,img:typeof w.img==="string"&&IMG_RE.test(w.img)?w.img:null})),
+    notices:arr(d.notices).map(n=>({id:n.id,pin:!!n.pin,title:cs(n.title,80),date:cs(n.date,10),body:cs(n.body,2000)}))
+  };
+}
+
+/* 현재 프로필 요약 표시 */
+function rBackup(){
+  const p=S.profile,L=[["이름","name"],["직업·소개","role"],["소개글","bio"],["지역","loc"],["도구","tool"],["연락","mail"],["작업 문의","ask"]];
+  $("#bkSum").innerHTML=L.map(([l,k])=>`<dt>${l}</dt><dd>${esc(p[k])||"-"}</dd>`).join("")+`<dt>프로필 사진</dt><dd>${p.avatar?"등록됨":"기본 그림"}</dd>`;
+}
+
+/* [내려받기] 현재 내용을 JSON 파일로 저장 */
+$("#bkDl").onclick=()=>{
+  const data={type:"profile-backup",version:1,savedAt:new Date().toISOString(),profile:S.profile};
+  if($("#bkAll").checked){data.cats=S.cats;data.works=S.works;data.notices=S.notices;data.tabs=S.tabs}   // 체크하면 공지·작품도 포함
+  const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}));
+  const a=document.createElement("a");a.href=url;a.download=`profile-backup-${today()}.json`;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  msg("백업 파일을 내려받았어요.");
+};
+
+/* [복원] 버튼 → 파일 선택창 열기 */
+$("#bkUp").onclick=()=>$("#bkFile").click();
+
+/* 파일 선택 후: 검사 → 확인 창 → 적용 → GitHub에 저장 */
+$("#bkFile").onchange=async e=>{
+  const f=e.target.files[0];e.target.value="";                              // 같은 파일을 다시 고를 수 있게 초기화
+  if(!f||!admin)return;
+  if(f.size>10*1024*1024){msg("파일이 너무 커요. (최대 10MB)");return}
+  let d;try{d=JSON.parse(await f.text())}catch(x){msg("백업 파일을 읽을 수 없어요.");return}
+  if(!d||d.type!=="profile-backup"||!d.profile||typeof d.profile!=="object"){msg("프로필 백업 파일이 아니에요.");return}
+  const hasAll=Array.isArray(d.cats)&&Array.isArray(d.works)&&Array.isArray(d.notices);
+  const fs=[{t:"msg",v:`${d.savedAt?d.savedAt.slice(0,10)+" 백업으로 ":""}현재 프로필을 되돌려요. 계속할까요?`}];
+  if(hasAll)fs.push({k:"all",t:"check",l:"공지·작품·분류도 함께 복원 (현재 내용은 사라져요)"});
+  const v=await form("백업에서 복원",fs,"복원");
+  if(!v)return;
+  Object.assign(S.profile,cleanProfile(d.profile));                         // 프로필 복원
+  if(v.all){const c=cleanAll(d);if(c)Object.assign(S,c);else msg("분류 정보가 없어 공지·작품은 복원하지 않았어요.")}
+  cat="all";commit();                                                        // 화면 갱신 + GitHub 저장
+};
 
 renderAll();
 (async()=>{
