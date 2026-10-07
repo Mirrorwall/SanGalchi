@@ -38,6 +38,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nv[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--acc)}
 .nav{flex-wrap:wrap}.nw{display:inline-flex;align-items:center;margin-bottom:-1px}.nav>.btn{align-self:center;margin:0 0 4px 6px}
 .pg{white-space:pre-wrap;margin:14px 0 0}
+.pgimg{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--line);margin:12px 0}
+.pgpv{display:flex;flex-wrap:wrap;gap:8px}
+.pgpv figure{margin:0;width:84px;font-size:12px;color:var(--mute);text-align:center}
+.pgpv img{display:block;width:84px;height:64px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+.pgpv button{border:0;background:none;color:#c0392b;cursor:pointer;font-size:12px;padding:2px}
 .bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .tabs{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .tw{display:inline-flex;align-items:center;gap:2px}
@@ -371,6 +376,8 @@ const TT=["page","notice","works"];
 const cleanArr=(a,fn)=>{const seen=new Set();return(Array.isArray(a)?a:[]).filter(x=>x&&typeof x==="object"&&ID_RE.test(x.id)&&!seen.has(x.id)&&seen.add(x.id)).map(fn)};
 const cleanDate=v=>typeof v==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:today();
 const cleanImg=v=>typeof v==="string"&&/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(v)?v:null;
+function cleanPageImgs(o){const r={};if(!o||typeof o!=="object")return r;let n=0;for(const k of Object.keys(o)){if(n>=PG_MAX)break;if(!/^\d{1,3}$/.test(k))continue;const v=cleanImg(o[k]);if(v){r[k]=v;n++}}return r}
+const PG_MAX=12;                                          // 페이지 하나에 넣을 수 있는 사진 수
 function cleanTabs(a){
   const seen=new Set(),out=[];
   for(const t of Array.isArray(a)?a:[]){
@@ -386,7 +393,7 @@ function cleanTabs(a){
     }else if(ty==="works"){
       let cats=cleanNc(t.cats);if(!cats.length)cats=[{id:uid(),name:"작품"}];
       out.push({id:t.id,name,type:ty,cats,works:cleanArr(t.works,w=>({id:w.id,title:cs(w.title,80)||"제목 없음",cat:cats.some(c=>c.id===w.cat)?w.cat:cats[0].id,date:cleanDate(w.date),desc:cs(w.desc,2000),hue:Number.isFinite(w.hue)?w.hue:hs(w.id)%360,img:cleanImg(w.img)}))});
-    }else out.push({id:t.id,name,type:"page",body:cs(t.body,2000)});
+    }else out.push({id:t.id,name,type:"page",body:cs(t.body,5000),imgs:cleanPageImgs(t.imgs)});
   }
   for(const d of seed().tabs)if(!seen.has(d.id))out.push(d);   // 빠진 기본 탭은 복구
   return out}
@@ -395,9 +402,17 @@ function rNav(){
   const tabs=S.tabs;
   $("#nav").innerHTML=tabs.map(t=>`<span class="nw"><button class="nv" type="button" role="tab" aria-selected="${t.id===pane}" data-tab="${t.id}">${esc(t.name)}</button>${edit?`<button class="mini" type="button" data-tl="${t.id}" title="왼쪽으로" aria-label="${esc(t.name)} 탭 왼쪽으로">◀</button><button class="mini" type="button" data-tr="${t.id}" title="오른쪽으로" aria-label="${esc(t.name)} 탭 오른쪽으로">▶</button><button class="mini" type="button" data-tren="${t.id}" title="이름 수정" aria-label="${esc(t.name)} 탭 이름 수정">✎</button>${!Object.hasOwn(BT,t.id)?`<button class="mini" type="button" data-tdel="${t.id}" title="탭 삭제" aria-label="${esc(t.name)} 탭 삭제">×</button>`:""}`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-tadd="1">+ 탭 추가</button>`:"");
 }
+function pgHtml(t){
+  const im=t.imgs||{};
+  return String(t.body).split(/(\[사진\d+\])/).map((p,i,a)=>{
+    const m=/^\[사진(\d+)\]$/.exec(p);
+    if(m)return im[m[1]]?`<img class="pgimg" src="${im[m[1]]}" alt="사진 ${m[1]}">`:"";
+    if(i>0&&/^\[사진\d+\]$/.test(a[i-1]))p=p.replace(/^\n/,"");
+    if(i<a.length-1&&/^\[사진\d+\]$/.test(a[i+1]))p=p.replace(/\n$/,"");
+    return esc(p)}).join("")}
 function rPage(t){
   if(t.type!=="page")return;
-  $("#pagePane").innerHTML=`<div class="bk"><h2>${esc(t.name)}</h2><p class="pg">${t.body?esc(t.body):`<span class="hint">아직 내용이 없어요.${edit?" 아래 ‘내용 수정’으로 써 보세요.":""}</span>`}</p>${edit?`<div class="acts"><button class="btn pri" type="button" data-pedit="${t.id}">내용 수정</button></div>`:""}</div>`;
+  $("#pagePane").innerHTML=`<div class="bk"><h2>${esc(t.name)}</h2><div class="pg">${t.body?pgHtml(t):`<span class="hint">아직 내용이 없어요.${edit?" 아래 ‘내용 수정’으로 써 보세요.":""}</span>`}</div>${edit?`<div class="acts"><button class="btn pri" type="button" data-pedit="${t.id}">내용 수정</button></div>`:""}</div>`;
 }
 function moveTab(id,dir){const a=S.tabs,i=a.findIndex(t=>t.id===id),j=i+dir;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]];commit()}
 async function renTab(id){
@@ -411,13 +426,36 @@ async function addTab(){
   const base={id:uid(),name:v.n.slice(0,30)};
   const t=v.type==="notice"?{...base,type:"notice",ncats:[],notices:[]}
     :v.type==="works"?{...base,type:"works",cats:[{id:uid(),name:"작품"}],works:[]}
-    :{...base,type:"page",body:""};
+    :{...base,type:"page",body:"",imgs:{}};
   S.tabs.push(t);pane=t.id;cat="all";ncat="all";commit();
 }
 async function editPage(id){
   const t=S.tabs.find(x=>x.id===id);if(!t)return;
-  const v=await form(`‘${t.name}’ 내용 수정`,[{k:"body",l:"내용",t:"area",v:t.body}]);
-  if(!v)return;t.body=v.body;commit();
+  const imgs={...(t.imgs||{})};
+  const d=$("#fm"),f=$("#fmF");
+  f.innerHTML=`<h2>${esc(`‘${t.name}’ 내용 수정`)}</h2><label>내용<textarea id="pgT" rows="10" maxlength="5000"></textarea></label><div><button type="button" class="btn" id="pgAdd">사진 넣기</button><input type="file" id="pgF" accept="image/*" multiple hidden></div><p class="hint">사진은 커서가 있던 자리에 [사진1] 처럼 들어가요. 이 표시를 옮기면 사진 위치가, 지우면 사진도 함께 빠져요.</p><div class="pgpv" id="pgPv"></div><div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn pri" id="fOk">저장</button></div>`;
+  const ta=$("#pgT");ta.value=t.body||"";
+  const used=()=>new Set([...ta.value.matchAll(/\[사진(\d+)\]/g)].map(m=>m[1]).filter(k=>imgs[k]));
+  const pv=()=>{$("#pgPv").innerHTML=[...used()].map(k=>`<figure><img src="${imgs[k]}" alt="사진 ${k}"><span>사진${k}</span><br><button type="button" data-k="${k}">빼기</button></figure>`).join("")};
+  pv();ta.oninput=pv;
+  $("#pgPv").onclick=e=>{const b=e.target.closest("button[data-k]");if(!b)return;const k=b.dataset.k;ta.value=ta.value.split(`[사진${k}]`).join("").replace(/\n{3,}/g,"\n\n");delete imgs[k];pv()};
+  $("#pgAdd").onclick=()=>$("#pgF").click();
+  $("#pgF").onchange=async e=>{
+    const fs=[...e.target.files];e.target.value="";
+    for(const file of fs){
+      if(used().size>=PG_MAX){msg(`사진은 한 페이지에 ${PG_MAX}장까지 넣을 수 있어요.`);break}
+      try{
+        const data=await shrink(file,960);
+        let n=1;while(imgs[n])n++;imgs[n]=data;
+        const pos=ta.selectionStart??ta.value.length,a=ta.value.slice(0,pos),b=ta.value.slice(pos);
+        const tok=(a&&!a.endsWith("\n")?"\n":"")+`[사진${n}]`+(b.startsWith("\n")?"":"\n");
+        ta.value=a+tok+b;ta.selectionStart=ta.selectionEnd=(a+tok).length;pv()
+      }catch(x){msg("이미지를 불러오지 못했어요.")}}
+  };
+  d.onclose=null;
+  $("#fX").onclick=()=>d.close();
+  $("#fOk").onclick=()=>{const keep=used(),out={};keep.forEach(k=>out[k]=imgs[k]);t.body=ta.value;t.imgs=out;d.close();commit()};
+  d.showModal();
 }
 async function delTab(id){
   const t=S.tabs.find(x=>x.id===id);if(!t||Object.hasOwn(BT,t.id))return;
