@@ -179,7 +179,6 @@ function seed(){
 let S=seed();
 let ui={};try{ui=JSON.parse(sessionStorage.getItem("ui")||"{}")}catch(e){}
 let admin=false,edit=!!ui.edit,pane=ui.pane||"n",cat=ui.cat||"all",view=ui.view||"grid",ncat=ui.ncat||"all";
-if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all";
 function ss(){try{sessionStorage.setItem("ui",JSON.stringify({edit,pane,cat,view,ncat}))}catch(e){}}
 
 /* ---------- 알림 / 저장(게시) ---------- */
@@ -197,7 +196,7 @@ function b64(t){const u=new TextEncoder().encode(t);let b="";for(let i=0;i<u.len
 function cfgGet(){try{return JSON.parse(localStorage.getItem("gh")||sessionStorage.getItem("gh")||"null")}catch(e){return null}}
 function cfgSet(c,keep){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh");(keep?localStorage:sessionStorage).setItem("gh",JSON.stringify(c))}catch(e){}}
 function cfgClear(){try{localStorage.removeItem("gh");sessionStorage.removeItem("gh")}catch(e){}}
-function applyData(d){S=Object.assign(seed(),d);fixTabs();S.ncats=cleanNc(S.ncats);if(cat!=="all"&&!S.cats.some(c=>c.id===cat))cat="all"}
+function applyData(d){S=Object.assign(seed(),d);fixTabs();S.ncats=cleanNc(S.ncats)}
 async function verify(c){
   const r=await fetch(`${API}/repos/${c.owner}/${c.repo}`,{headers:{"Authorization":"Bearer "+c.token,"X-GitHub-Api-Version":"2022-11-28"}});
   if(!r.ok)return false;const j=await r.json();return !!(j.permissions&&(j.permissions.push||j.permissions.admin))}
@@ -266,7 +265,10 @@ function form(title,fs,ok="저장"){return new Promise(res=>{
   d.showModal()})}
 
 /* ---------- 렌더링 ---------- */
-const catName=id=>(S.cats.find(c=>c.id===id)||{name:"미분류"}).name;
+/* 현재 탭의 데이터 보관소: 기본 탭 2개는 S, 새로 만든 탭은 탭 객체 자신 */
+const curTab=()=>S.tabs.find(t=>t.id===pane)||S.tabs[0];
+const H=()=>{const t=curTab();return Object.hasOwn(BT,t.id)?S:t};
+const catName=id=>(H().cats.find(c=>c.id===id)||{name:"미분류"}).name;
 const th=w=>w.img?`<img src="${w.img}" alt="">`:art(hs(w.id),w.hue);
 const LBL=[["loc","지역"],["tool","도구"],["mail","연락"],["ask","작업 문의"]];
 function rProfile(){
@@ -280,19 +282,20 @@ function rProfile(){
   $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 저장하면 GitHub에 반영되고, 방문자 화면에는 1~2분 뒤 보여요.":"관리자만 보이는 메뉴예요.";
 }
 function rNotices(){
-  if(ncat!=="all"&&!S.ncats.some(c=>c.id===ncat))ncat="all";
-  const nt=$("#nTabs");nt.hidden=!S.ncats.length&&!edit;
-  nt.innerHTML=[{id:"all",name:"전체"},...S.ncats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===ncat}" data-nc="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-nrenc="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 분류 이름 수정">✎</button><button class="mini" type="button" data-ndelc="${c.id}" title="분류 삭제" aria-label="${esc(c.name)} 분류 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-naddc="1">+ 분류 추가</button>`:"");
-  const ns=S.notices.filter(n=>ncat==="all"||n.cat===ncat).sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
+  if(ncat!=="all"&&!H().ncats.some(c=>c.id===ncat))ncat="all";
+  const nt=$("#nTabs");nt.hidden=!H().ncats.length&&!edit;
+  nt.innerHTML=[{id:"all",name:"전체"},...H().ncats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===ncat}" data-nc="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-nrenc="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 분류 이름 수정">✎</button><button class="mini" type="button" data-ndelc="${c.id}" title="분류 삭제" aria-label="${esc(c.name)} 분류 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-naddc="1">+ 분류 추가</button>`:"");
+  const ns=H().notices.filter(n=>ncat==="all"||n.cat===ncat).sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
   $("#nCount").textContent=`공지 ${ns.length}개`;
   $("#nAdd").hidden=!edit;
   $("#notes").innerHTML=ns.length?ns.map(n=>`<details><summary><span class="tag${n.pin?" pin":""}">${n.pin?"중요":esc(ncName(n.cat))}</span><span>${esc(n.title)}</span><span class="d">${esc(n.date)}</span></summary><div class="nb"><p>${esc(n.body)}</p>${edit?`<div class="acts"><button class="btn dng" type="button" data-ndel="${n.id}">삭제</button><button class="btn" type="button" data-ned="${n.id}">수정</button></div>`:""}</div></details>`).join(""):`<div class="empty">등록된 공지가 없어요.${edit?"<br>‘공지 쓰기’로 첫 공지를 올려 보세요.":""}</div>`;
 }
 function rWorks(){
-  $("#tabs").innerHTML=[{id:"all",name:"전체"},...S.cats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===cat}" data-c="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-ren="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 탭 이름 수정">✎</button><button class="mini" type="button" data-dc="${c.id}" title="탭 삭제" aria-label="${esc(c.name)} 탭 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-addc="1">+ 탭 추가</button>`:"");
+  if(cat!=="all"&&!H().cats.some(c=>c.id===cat))cat="all";
+  $("#tabs").innerHTML=[{id:"all",name:"전체"},...H().cats].map(c=>`<span class="tw"><button class="tab" type="button" aria-pressed="${c.id===cat}" data-c="${c.id}">${esc(c.name)}</button>${edit&&c.id!=="all"?`<button class="mini" type="button" data-ren="${c.id}" title="이름 수정" aria-label="${esc(c.name)} 탭 이름 수정">✎</button><button class="mini" type="button" data-dc="${c.id}" title="탭 삭제" aria-label="${esc(c.name)} 탭 삭제">×</button>`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-addc="1">+ 탭 추가</button>`:"");
   $("#wAdd").hidden=!edit;
   $("#vGrid").setAttribute("aria-pressed",view==="grid");$("#vList").setAttribute("aria-pressed",view==="list");
-  const list=S.works.filter(w=>cat==="all"||w.cat===cat).sort((a,b)=>b.date.localeCompare(a.date));
+  const list=H().works.filter(w=>cat==="all"||w.cat===cat).sort((a,b)=>b.date.localeCompare(a.date));
   $("#count").textContent=`게시물 ${list.length}개`;
   const o=$("#out");
   if(!list.length){o.innerHTML=`<div class="empty">이 분류에는 아직 작품이 없어요.${edit?"<br>‘작품 올리기’로 추가해 보세요.":""}</div>`;return}
@@ -304,80 +307,93 @@ function renderAll(){
   if(!cur){cur=S.tabs[0];pane=cur.id}   // 없는 탭이면 첫 탭으로
   const ty=cur.type;
   $("#noticePane").hidden=ty!=="notice";$("#worksPane").hidden=ty!=="works";$("#pagePane").hidden=ty!=="page";
-  rNav();rProfile();rNotices();rWorks();rPage(cur);
+  rNav();rProfile();if(ty==="notice")rNotices();else if(ty==="works")rWorks();else rPage(cur);
 }
 
 /* ---------- 편집 동작 ---------- */
 async function editNotice(id){
-  const n=id?S.notices.find(x=>x.id===id):null;
-  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"cat",l:"분류",t:"select",o:[["","미분류"],...S.ncats.map(c=>[c.id,c.name])],v:n?.cat||(!n&&ncat!=="all"?ncat:"")},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"area",v:n?.body}]);
+  const n=id?H().notices.find(x=>x.id===id):null;
+  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"cat",l:"분류",t:"select",o:[["","미분류"],...H().ncats.map(c=>[c.id,c.name])],v:n?.cat||(!n&&ncat!=="all"?ncat:"")},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"area",v:n?.body}]);
   if(!v)return;
-  if(n)Object.assign(n,v);else S.notices.push({id:uid(),...v});
+  if(n)Object.assign(n,v);else H().notices.push({id:uid(),...v});
   commit();
 }
 async function editWork(id){
-  const w=id?S.works.find(x=>x.id===id):null;
-  const v=await form(w?"작품 수정":"작품 올리기",[{k:"title",l:"제목",t:"text",v:w?.title,req:1},{k:"cat",l:"분류",t:"select",o:S.cats.map(c=>[c.id,c.name]),v:w?.cat||(cat!=="all"?cat:S.cats[0].id)},{k:"date",l:"날짜",t:"date",v:w?.date||today()},{k:"img",l:w?"이미지 바꾸기 (선택)":"이미지 (선택, 없으면 자동 그림)",t:"file"},{k:"desc",l:"설명",t:"area",v:w?.desc}]);
+  const w=id?H().works.find(x=>x.id===id):null;
+  const v=await form(w?"작품 수정":"작품 올리기",[{k:"title",l:"제목",t:"text",v:w?.title,req:1},{k:"cat",l:"분류",t:"select",o:H().cats.map(c=>[c.id,c.name]),v:w?.cat||(cat!=="all"?cat:H().cats[0].id)},{k:"date",l:"날짜",t:"date",v:w?.date||today()},{k:"img",l:w?"이미지 바꾸기 (선택)":"이미지 (선택, 없으면 자동 그림)",t:"file"},{k:"desc",l:"설명",t:"area",v:w?.desc}]);
   if(!v)return;
   const {img,...rest}=v;
-  if(w){Object.assign(w,rest);if(img)w.img=img}else S.works.push({id:uid(),...rest,hue:Math.random()*360|0,img});
+  if(w){Object.assign(w,rest);if(img)w.img=img}else H().works.push({id:uid(),...rest,hue:Math.random()*360|0,img});
   $("#dlg").close();commit();
 }
 async function delItem(arr,id,what){
   const v=await form(`${what} 삭제`,[{t:"msg",v:"삭제하면 되돌릴 수 없어요. 삭제할까요?"}],"삭제");
-  if(!v)return;S[arr]=S[arr].filter(x=>x.id!==id);$("#dlg").close();commit();
+  if(!v)return;H()[arr]=H()[arr].filter(x=>x.id!==id);$("#dlg").close();commit();
 }
 async function addCat(){
   const v=await form("탭 추가",[{k:"n",l:"탭 이름",t:"text",req:1}],"추가");
-  if(!v)return;const c={id:uid(),name:v.n};S.cats.push(c);cat=c.id;commit();
+  if(!v)return;const c={id:uid(),name:v.n};H().cats.push(c);cat=c.id;commit();
 }
 async function renCat(id){
-  const c=S.cats.find(x=>x.id===id);
+  const c=H().cats.find(x=>x.id===id);
   const v=await form("탭 이름 수정",[{k:"n",l:"탭 이름",t:"text",v:c.name,req:1}]);
   if(!v)return;c.name=v.n;commit();
 }
 async function delCat(id){
-  if(S.cats.length<2){msg("탭은 최소 1개가 필요해요.");return}
-  const c=S.cats.find(x=>x.id===id),rest=S.cats.filter(x=>x.id!==id),n=S.works.filter(w=>w.cat===id).length;
+  if(H().cats.length<2){msg("탭은 최소 1개가 필요해요.");return}
+  const c=H().cats.find(x=>x.id===id),rest=H().cats.filter(x=>x.id!==id),n=H().works.filter(w=>w.cat===id).length;
   const v=await form("탭 삭제",[{t:"msg",v:n?`‘${c.name}’ 탭을 삭제하면 작품 ${n}개는 ‘${rest[0].name}’ 탭으로 옮겨져요.`:`‘${c.name}’ 탭을 삭제할까요?`}],"삭제");
   if(!v)return;
-  S.works.forEach(w=>{if(w.cat===id)w.cat=rest[0].id});S.cats=rest;if(cat===id)cat="all";commit();
+  H().works.forEach(w=>{if(w.cat===id)w.cat=rest[0].id});H().cats=rest;if(cat===id)cat="all";commit();
 }
 /* ---------- 공지 분류 (추가 · 이름 수정 · 삭제) ---------- */
-const ncName=id=>(S.ncats.find(c=>c.id===id)||{name:"공지"}).name;
+const ncName=id=>(H().ncats.find(c=>c.id===id)||{name:"공지"}).name;
 function cleanNc(a){const seen=new Set();return(Array.isArray(a)?a:[]).filter(c=>c&&typeof c==="object"&&ID_RE.test(c.id)&&!seen.has(c.id)&&seen.add(c.id)).map(c=>({id:c.id,name:cs(c.name,40)||"분류"}))}
 async function addNCat(){
   const v=await form("공지 분류 추가",[{k:"n",l:"분류 이름",t:"text",req:1}],"추가");
-  if(!v)return;const c={id:uid(),name:v.n.slice(0,40)};S.ncats.push(c);ncat=c.id;commit();
+  if(!v)return;const c={id:uid(),name:v.n.slice(0,40)};H().ncats.push(c);ncat=c.id;commit();
 }
 async function renNCat(id){
-  const c=S.ncats.find(x=>x.id===id);if(!c)return;
+  const c=H().ncats.find(x=>x.id===id);if(!c)return;
   const v=await form("분류 이름 수정",[{k:"n",l:"분류 이름",t:"text",v:c.name,req:1}]);
   if(!v)return;c.name=v.n.slice(0,40);commit();
 }
 async function delNCat(id){
-  const c=S.ncats.find(x=>x.id===id);if(!c)return;
-  const n=S.notices.filter(x=>x.cat===id).length;
+  const c=H().ncats.find(x=>x.id===id);if(!c)return;
+  const n=H().notices.filter(x=>x.cat===id).length;
   const v=await form("분류 삭제",[{t:"msg",v:n?`‘${c.name}’ 분류를 삭제하면 공지 ${n}개는 ‘미분류’가 돼요. (공지는 삭제되지 않아요)`:`‘${c.name}’ 분류를 삭제할까요?`}],"삭제");
   if(!v)return;
-  S.notices.forEach(x=>{if(x.cat===id)x.cat=""});S.ncats=S.ncats.filter(x=>x.id!==id);if(ncat===id)ncat="all";commit();
+  H().notices.forEach(x=>{if(x.cat===id)x.cat=""});H().ncats=H().ncats.filter(x=>x.id!==id);if(ncat===id)ncat="all";commit();
 }
 /* ---------- 메인 탭 편집 (이름 수정 · 순서 · 추가 · 삭제) ---------- */
 const BT={n:"notice",w:"works"};                        // 기본 탭 2개 (삭제 불가, 이름·순서는 변경 가능)
+const TT=["page","notice","works"];
+const cleanArr=(a,fn)=>{const seen=new Set();return(Array.isArray(a)?a:[]).filter(x=>x&&typeof x==="object"&&ID_RE.test(x.id)&&!seen.has(x.id)&&seen.add(x.id)).map(fn)};
+const cleanDate=v=>typeof v==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(v)?v:today();
+const cleanImg=v=>typeof v==="string"&&/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(v)?v:null;
 function cleanTabs(a){
   const seen=new Set(),out=[];
   for(const t of Array.isArray(a)?a:[]){
     if(!t||typeof t!=="object"||!ID_RE.test(t.id)||t.id==="b"||seen.has(t.id))continue;   // 예전 백업 탭(b)은 버림
    seen.add(t.id);
     const b=Object.hasOwn(BT,t.id);
-    out.push(b?{id:t.id,name:cs(t.name,30)||"탭",type:BT[t.id]}:{id:t.id,name:cs(t.name,30)||"탭",type:"page",body:cs(t.body,2000)});
+    const name=cs(t.name,30)||"탭";
+    if(b){out.push({id:t.id,name,type:BT[t.id]});continue}
+    const ty=TT.includes(t.type)?t.type:"page";
+    if(ty==="notice"){
+      const ncats=cleanNc(t.ncats);
+      out.push({id:t.id,name,type:ty,ncats,notices:cleanArr(t.notices,n=>({id:n.id,pin:!!n.pin,title:cs(n.title,80)||"제목 없음",date:cleanDate(n.date),cat:ncats.some(c=>c.id===n.cat)?n.cat:"",body:cs(n.body,2000)}))});
+    }else if(ty==="works"){
+      let cats=cleanNc(t.cats);if(!cats.length)cats=[{id:uid(),name:"작품"}];
+      out.push({id:t.id,name,type:ty,cats,works:cleanArr(t.works,w=>({id:w.id,title:cs(w.title,80)||"제목 없음",cat:cats.some(c=>c.id===w.cat)?w.cat:cats[0].id,date:cleanDate(w.date),desc:cs(w.desc,2000),hue:Number.isFinite(w.hue)?w.hue:hs(w.id)%360,img:cleanImg(w.img)}))});
+    }else out.push({id:t.id,name,type:"page",body:cs(t.body,2000)});
   }
   for(const d of seed().tabs)if(!seen.has(d.id))out.push(d);   // 빠진 기본 탭은 복구
   return out}
 function fixTabs(){S.tabs=cleanTabs(S.tabs)}
 function rNav(){
   const tabs=S.tabs;
-  $("#nav").innerHTML=tabs.map(t=>`<span class="nw"><button class="nv" type="button" role="tab" aria-selected="${t.id===pane}" data-tab="${t.id}">${esc(t.name)}</button>${edit?`<button class="mini" type="button" data-tl="${t.id}" title="왼쪽으로" aria-label="${esc(t.name)} 탭 왼쪽으로">◀</button><button class="mini" type="button" data-tr="${t.id}" title="오른쪽으로" aria-label="${esc(t.name)} 탭 오른쪽으로">▶</button><button class="mini" type="button" data-tren="${t.id}" title="이름 수정" aria-label="${esc(t.name)} 탭 이름 수정">✎</button>${t.type==="page"?`<button class="mini" type="button" data-tdel="${t.id}" title="탭 삭제" aria-label="${esc(t.name)} 탭 삭제">×</button>`:""}`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-tadd="1">+ 탭 추가</button>`:"");
+  $("#nav").innerHTML=tabs.map(t=>`<span class="nw"><button class="nv" type="button" role="tab" aria-selected="${t.id===pane}" data-tab="${t.id}">${esc(t.name)}</button>${edit?`<button class="mini" type="button" data-tl="${t.id}" title="왼쪽으로" aria-label="${esc(t.name)} 탭 왼쪽으로">◀</button><button class="mini" type="button" data-tr="${t.id}" title="오른쪽으로" aria-label="${esc(t.name)} 탭 오른쪽으로">▶</button><button class="mini" type="button" data-tren="${t.id}" title="이름 수정" aria-label="${esc(t.name)} 탭 이름 수정">✎</button>${!Object.hasOwn(BT,t.id)?`<button class="mini" type="button" data-tdel="${t.id}" title="탭 삭제" aria-label="${esc(t.name)} 탭 삭제">×</button>`:""}`:""}</span>`).join("")+(edit?`<button class="btn" type="button" data-tadd="1">+ 탭 추가</button>`:"");
 }
 function rPage(t){
   if(t.type!=="page")return;
@@ -390,8 +406,13 @@ async function renTab(id){
   if(!v)return;t.name=v.n.slice(0,30);commit();
 }
 async function addTab(){
-  const v=await form("탭 추가",[{t:"msg",v:"자유롭게 글을 쓸 수 있는 새 탭이 만들어져요."},{k:"n",l:"탭 이름",t:"text",req:1}],"추가");
-  if(!v)return;const t={id:uid(),name:v.n.slice(0,30),type:"page",body:""};S.tabs.push(t);pane=t.id;commit();
+  const v=await form("탭 추가",[{t:"msg",v:"새 탭의 형식을 골라 주세요."},{k:"n",l:"탭 이름",t:"text",req:1},{k:"type",l:"탭 형식",t:"select",v:"notice",o:[["notice","공지사항 형식 (공지 목록 · 분류 · 중요 고정)"],["works","작품 게시판 형식 (갤러리/게시판 · 분류)"],["page","자유 글 페이지 (글만 쓰는 탭)"]]}],"추가");
+  if(!v)return;
+  const base={id:uid(),name:v.n.slice(0,30)};
+  const t=v.type==="notice"?{...base,type:"notice",ncats:[],notices:[]}
+    :v.type==="works"?{...base,type:"works",cats:[{id:uid(),name:"작품"}],works:[]}
+    :{...base,type:"page",body:""};
+  S.tabs.push(t);pane=t.id;cat="all";ncat="all";commit();
 }
 async function editPage(id){
   const t=S.tabs.find(x=>x.id===id);if(!t)return;
@@ -399,19 +420,19 @@ async function editPage(id){
   if(!v)return;t.body=v.body;commit();
 }
 async function delTab(id){
-  const t=S.tabs.find(x=>x.id===id);if(!t||t.type!=="page")return;
-  const v=await form("탭 삭제",[{t:"msg",v:`‘${t.name}’ 탭과 그 안의 내용이 삭제돼요. 삭제할까요?`}],"삭제");
+  const t=S.tabs.find(x=>x.id===id);if(!t||Object.hasOwn(BT,t.id))return;
+  const v=await form("탭 삭제",[{t:"msg",v:`‘${t.name}’ 탭과 그 안의 내용이 모두 삭제돼요. 삭제할까요?`}],"삭제");
   if(!v)return;S.tabs=S.tabs.filter(x=>x.id!==id);if(pane===id)pane="n";commit();
 }
 function openWork(id){
-  const w=S.works.find(x=>x.id===id);if(!w)return;
+  const w=H().works.find(x=>x.id===id);if(!w)return;
   $("#dlgBody").innerHTML=`<div class="dv">${th(w)}</div><div class="db"><h2>${esc(w.title)}</h2><div class="meta">${esc(catName(w.cat))} · ${esc(w.date)}</div><p>${esc(w.desc||"설명이 없어요.")}</p><div class="acts">${edit?`<button class="btn dng" type="button" data-wdel="${w.id}">삭제</button><button class="btn" type="button" data-wed="${w.id}">수정</button>`:""}<button class="btn pri" type="button" id="cls">닫기</button></div></div>`;
   $("#dlg").showModal();
 }
 
 document.addEventListener("click",e=>{
   const t=e.target.closest("button");if(!t)return;const d=t.dataset;
-  if(d.tab){pane=d.tab;ss();renderAll()}
+  if(d.tab){if(d.tab!==pane){cat="all";ncat="all"}pane=d.tab;ss();renderAll()}
   else if(d.nc){ncat=d.nc;ss();rNotices()}
   else if(d.naddc)addNCat();
   else if(d.nrenc)renNCat(d.nrenc);
