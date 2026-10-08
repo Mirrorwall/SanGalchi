@@ -38,6 +38,16 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nv[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--acc)}
 .nav{flex-wrap:wrap}.nw{display:inline-flex;align-items:center;margin-bottom:-1px}.nav>.btn{align-self:center;margin:0 0 4px 6px}
 .pg{white-space:pre-wrap;margin:14px 0 0}
+.rich{display:block;margin:0 0 12px;font-size:14px;color:var(--mute)}
+.rich .rl{display:block;margin-bottom:4px}
+.fbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+form.add .fbar select{width:auto;padding:4px 6px}
+.fbar .sw{display:flex;gap:4px}
+.fbar .sw button{width:22px;height:22px;border-radius:50%;border:1px solid var(--line);padding:0;cursor:pointer}
+form.add .fbar input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);background:none;cursor:pointer}
+.rich .fh.warn{color:#c0392b}
+.fpv{margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:4px;max-height:180px;overflow:auto;white-space:pre-wrap;color:var(--ink)}
+.fpv .pgimg{max-height:140px;width:auto}
 .pgimg{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--line);margin:12px 0}
 .pgpv{display:flex;flex-wrap:wrap;gap:8px}
 .pgpv figure{margin:0;width:84px;font-size:12px;color:var(--mute);text-align:center}
@@ -259,7 +269,8 @@ async function shrink(file,max){
   return c.toDataURL("image/jpeg",.82)}
 function form(title,fs,ok="저장"){return new Promise(res=>{
   const d=$("#fm"),f=$("#fmF");
-  f.innerHTML=`<h2>${title}</h2>`+fs.map((x,i)=>x.t==="msg"?`<p>${esc(x.v)}</p>`:x.t==="check"?`<label class="ck"><input type="checkbox" id="f${i}" ${x.v?"checked":""}> ${x.l}</label>`:`<label>${x.l}${x.t==="area"?`<textarea id="f${i}" rows="5" maxlength="2000">${esc(x.v)}</textarea>`:x.t==="select"?`<select id="f${i}">${x.o.map(o=>`<option value="${esc(o[0])}"${o[0]===x.v?" selected":""}>${esc(o[1])}</option>`).join("")}</select>`:x.t==="file"?`<input id="f${i}" type="file" accept="image/*">`:`<input id="f${i}" type="${x.t}" value="${esc(x.v)}" maxlength="${x.t==="password"?300:80}" autocomplete="off">`}</label>`).join("")+`<div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn ${ok==="삭제"?"dng":"pri"}" id="fOk">${ok}</button></div>`;
+  f.innerHTML=`<h2>${title}</h2>`+fs.map((x,i)=>x.t==="msg"?`<p>${esc(x.v)}</p>`:x.t==="rich"?richHtml("f"+i,x.l,6):x.t==="check"?`<label class="ck"><input type="checkbox" id="f${i}" ${x.v?"checked":""}> ${x.l}</label>`:`<label>${x.l}${x.t==="area"?`<textarea id="f${i}" rows="5" maxlength="2000">${esc(x.v)}</textarea>`:x.t==="select"?`<select id="f${i}">${x.o.map(o=>`<option value="${esc(o[0])}"${o[0]===x.v?" selected":""}>${esc(o[1])}</option>`).join("")}</select>`:x.t==="file"?`<input id="f${i}" type="file" accept="image/*">`:`<input id="f${i}" type="${x.t}" value="${esc(x.v)}" maxlength="${x.t==="password"?300:80}" autocomplete="off">`}</label>`).join("")+`<div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn ${ok==="삭제"?"dng":"pri"}" id="fOk">${ok}</button></div>`;
+  fs.forEach((x,i)=>{if(x.t==="rich"){const r=$("#f"+i);r.value=x.v||"";wireFmt(r.closest(".rich"))}});
   d.onclose=()=>res(null);
   $("#fX").onclick=()=>d.close();
   $("#fOk").onclick=async()=>{const o={};
@@ -294,7 +305,7 @@ function rNotices(){
   const ns=H().notices.filter(n=>ncat==="all"||n.cat===ncat).sort((a,b)=>(b.pin-a.pin)||b.date.localeCompare(a.date));
   $("#nCount").textContent=`공지 ${ns.length}개`;
   $("#nAdd").hidden=!edit;
-  $("#notes").innerHTML=ns.length?ns.map(n=>`<details><summary><span class="tag${n.pin?" pin":""}">${n.pin?"중요":esc(ncName(n.cat))}</span><span>${esc(n.title)}</span><span class="d">${esc(n.date)}</span></summary><div class="nb"><p>${esc(n.body)}</p>${edit?`<div class="acts"><button class="btn dng" type="button" data-ndel="${n.id}">삭제</button><button class="btn" type="button" data-ned="${n.id}">수정</button></div>`:""}</div></details>`).join(""):`<div class="empty">등록된 공지가 없어요.${edit?"<br>‘공지 쓰기’로 첫 공지를 올려 보세요.":""}</div>`;
+  $("#notes").innerHTML=ns.length?ns.map(n=>`<details><summary><span class="tag${n.pin?" pin":""}">${n.pin?"중요":esc(ncName(n.cat))}</span><span>${esc(n.title)}</span><span class="d">${esc(n.date)}</span></summary><div class="nb"><p>${fmt(n.body)}</p>${edit?`<div class="acts"><button class="btn dng" type="button" data-ndel="${n.id}">삭제</button><button class="btn" type="button" data-ned="${n.id}">수정</button></div>`:""}</div></details>`).join(""):`<div class="empty">등록된 공지가 없어요.${edit?"<br>‘공지 쓰기’로 첫 공지를 올려 보세요.":""}</div>`;
 }
 function rWorks(){
   if(cat!=="all"&&!H().cats.some(c=>c.id===cat))cat="all";
@@ -320,14 +331,14 @@ function renderAll(){
 /* ---------- 편집 동작 ---------- */
 async function editNotice(id){
   const n=id?H().notices.find(x=>x.id===id):null;
-  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"cat",l:"분류",t:"select",o:[["","미분류"],...H().ncats.map(c=>[c.id,c.name])],v:n?.cat||(!n&&ncat!=="all"?ncat:"")},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"area",v:n?.body}]);
+  const v=await form(n?"공지 수정":"공지 쓰기",[{k:"title",l:"제목",t:"text",v:n?.title,req:1},{k:"date",l:"날짜",t:"date",v:n?.date||today()},{k:"cat",l:"분류",t:"select",o:[["","미분류"],...H().ncats.map(c=>[c.id,c.name])],v:n?.cat||(!n&&ncat!=="all"?ncat:"")},{k:"pin",l:"중요 공지로 맨 위에 고정",t:"check",v:n?.pin},{k:"body",l:"내용",t:"rich",v:n?.body}]);
   if(!v)return;
   if(n)Object.assign(n,v);else H().notices.push({id:uid(),...v});
   commit();
 }
 async function editWork(id){
   const w=id?H().works.find(x=>x.id===id):null;
-  const v=await form(w?"작품 수정":"작품 올리기",[{k:"title",l:"제목",t:"text",v:w?.title,req:1},{k:"cat",l:"분류",t:"select",o:H().cats.map(c=>[c.id,c.name]),v:w?.cat||(cat!=="all"?cat:H().cats[0].id)},{k:"date",l:"날짜",t:"date",v:w?.date||today()},{k:"img",l:w?"이미지 바꾸기 (선택)":"이미지 (선택, 없으면 자동 그림)",t:"file"},{k:"desc",l:"설명",t:"area",v:w?.desc}]);
+  const v=await form(w?"작품 수정":"작품 올리기",[{k:"title",l:"제목",t:"text",v:w?.title,req:1},{k:"cat",l:"분류",t:"select",o:H().cats.map(c=>[c.id,c.name]),v:w?.cat||(cat!=="all"?cat:H().cats[0].id)},{k:"date",l:"날짜",t:"date",v:w?.date||today()},{k:"img",l:w?"이미지 바꾸기 (선택)":"이미지 (선택, 없으면 자동 그림)",t:"file"},{k:"desc",l:"설명",t:"rich",v:w?.desc}]);
   if(!v)return;
   const {img,...rest}=v;
   if(w){Object.assign(w,rest);if(img)w.img=img}else H().works.push({id:uid(),...rest,hue:Math.random()*360|0,img});
@@ -391,10 +402,10 @@ function cleanTabs(a){
     const ty=TT.includes(t.type)?t.type:"page";
     if(ty==="notice"){
       const ncats=cleanNc(t.ncats);
-      out.push({id:t.id,name,type:ty,ncats,notices:cleanArr(t.notices,n=>({id:n.id,pin:!!n.pin,title:cs(n.title,80)||"제목 없음",date:cleanDate(n.date),cat:ncats.some(c=>c.id===n.cat)?n.cat:"",body:cs(n.body,2000)}))});
+      out.push({id:t.id,name,type:ty,ncats,notices:cleanArr(t.notices,n=>({id:n.id,pin:!!n.pin,title:cs(n.title,80)||"제목 없음",date:cleanDate(n.date),cat:ncats.some(c=>c.id===n.cat)?n.cat:"",body:cs(n.body,5000)}))});
     }else if(ty==="works"){
       let cats=cleanNc(t.cats);if(!cats.length)cats=[{id:uid(),name:"작품"}];
-      out.push({id:t.id,name,type:ty,cats,works:cleanArr(t.works,w=>({id:w.id,title:cs(w.title,80)||"제목 없음",cat:cats.some(c=>c.id===w.cat)?w.cat:cats[0].id,date:cleanDate(w.date),desc:cs(w.desc,2000),hue:Number.isFinite(w.hue)?w.hue:hs(w.id)%360,img:cleanImg(w.img)}))});
+      out.push({id:t.id,name,type:ty,cats,works:cleanArr(t.works,w=>({id:w.id,title:cs(w.title,80)||"제목 없음",cat:cats.some(c=>c.id===w.cat)?w.cat:cats[0].id,date:cleanDate(w.date),desc:cs(w.desc,5000),hue:Number.isFinite(w.hue)?w.hue:hs(w.id)%360,img:cleanImg(w.img)}))});
     }else if(ty==="group")out.push({id:t.id,name,type:"group"});
     else out.push({id:t.id,name,type:"page",body:cs(t.body,5000),imgs:cleanPageImgs(t.imgs),parent:cs(t.parent,40)});
   }
@@ -420,14 +431,50 @@ function rSub(top){
   el.hidden=!kids.length&&!edit;
   el.innerHTML=kids.map(k=>`<span class="tw"><button class="tab" type="button" aria-pressed="${k.id===pane}" data-sub="${k.id}">${esc(k.name)}</button>${edit?tabCtl(k):""}</span>`).join("")+(edit?`<button class="btn" type="button" data-sadd="${top.id}">+ 글 탭 추가</button>`:"");
 }
-function pgHtml(t){
-  const im=t.imgs||{};
-  return String(t.body).split(/(\[사진\d+\])/).map((p,i,a)=>{
-    const m=/^\[사진(\d+)\]$/.exec(p);
-    if(m)return im[m[1]]?`<img class="pgimg" src="${im[m[1]]}" alt="사진 ${m[1]}">`:"";
-    if(i>0&&/^\[사진\d+\]$/.test(a[i-1]))p=p.replace(/^\n/,"");
-    if(i<a.length-1&&/^\[사진\d+\]$/.test(a[i+1]))p=p.replace(/\n$/,"");
-    return esc(p)}).join("")}
+/* 글자 서식: [크기=20]글자[/크기], [색=#e03131]글자[/색] (겹쳐 쓸 수 있음), [사진1] */
+function fmt(text,imgs){
+  text=String(text??"");
+  const re=/\[(크기|색)=([^\]\s]{1,12})\]|\[\/(크기|색)\]|\[사진(\d+)\]/g,parts=[];let last=0,m;
+  while((m=re.exec(text))){
+    if(m.index>last)parts.push({t:"x",v:text.slice(last,m.index)});
+    if(m[1])parts.push({t:"o",k:m[1],v:m[2]});else if(m[3])parts.push({t:"c",k:m[3]});else parts.push({t:"i",n:m[4]});
+    last=re.lastIndex}
+  if(last<text.length)parts.push({t:"x",v:text.slice(last)});
+  parts.forEach((p,i)=>{if(p.t!=="i")return;                      // 사진 앞뒤의 줄바꿈 한 번씩 정리
+    for(let j=i-1;j>=0;j--){if(parts[j].t==="x"){parts[j].v=parts[j].v.replace(/\n$/,"");break}if(parts[j].t==="i")break}
+    for(let j=i+1;j<parts.length;j++){if(parts[j].t==="x"){parts[j].v=parts[j].v.replace(/^\n/,"");break}if(parts[j].t==="i")break}});
+  const style=(k,v)=>k==="크기"?(/^\d{1,2}$/.test(v)?`font-size:${Math.min(60,Math.max(10,+v))}px`:""):(/^#[0-9a-fA-F]{6}$/.test(v)?`color:${v}`:"");
+  const op=e=>e.s?`<span style="${e.s}">`:"",cl=e=>e.s?"</span>":"";
+  let out="",st=[];
+  for(const p of parts){
+    if(p.t==="x")out+=esc(p.v);
+    else if(p.t==="o"){const e={k:p.k,s:style(p.k,p.v)};st.push(e);out+=op(e)}
+    else if(p.t==="c"){const i=st.map(e=>e.k).lastIndexOf(p.k);if(i<0)continue;
+      const above=st.splice(i);out+=above.slice().reverse().map(cl).join("");
+      above.slice(1).forEach(e=>{st.push(e);out+=op(e)})}
+    else{const src=imgs&&imgs[p.n];if(!src)continue;
+      out+=st.slice().reverse().map(cl).join("")+`<img class="pgimg" src="${esc(src)}" alt="사진 ${p.n}">`+st.map(op).join("")}}
+  return out+st.slice().reverse().map(cl).join("");
+}
+const SW=[["#e03131","빨강"],["#f76707","주황"],["#f59f00","노랑"],["#2f9e44","초록"],["#1c7ed6","파랑"],["#7048e8","보라"],["#d6336c","분홍"],["#868e96","회색"]];
+const RICH_HINT="먼저 글자를 드래그해 선택한 뒤, 크기나 색을 고르세요.";
+function richHtml(id,label,rows){
+  return `<div class="rich"><span class="rl">${esc(label)}</span><div class="fbar"><select class="fsz" aria-label="글자 크기"><option value="">글자 크기</option><option value="13">작게</option><option value="20">크게</option><option value="28">아주 크게</option><option value="36">특대</option></select><span class="sw">${SW.map(c=>`<button type="button" data-c="${c[0]}" style="background:${c[0]}" title="${c[1]}" aria-label="글자색 ${c[1]}"></button>`).join("")}</span><input type="color" class="fcol" value="#e03131" title="직접 고른 색" aria-label="글자색 직접 고르기"><button type="button" class="mini fclr" title="선택한 글자의 크기·색 서식 지우기">서식 지우기</button></div><p class="hint fh">${RICH_HINT}</p><textarea id="${id}" rows="${rows}" maxlength="5000"></textarea><div class="fpv" aria-live="polite"></div></div>`}
+function wireFmt(root,getImgs){
+  const ta=root.querySelector("textarea"),pv=root.querySelector(".fpv"),fh=root.querySelector(".fh");let ht;
+  const refresh=()=>{pv.innerHTML=ta.value.trim()?fmt(ta.value,getImgs&&getImgs()):`<span class="hint">미리보기가 여기에 나와요.</span>`};
+  const warn=()=>{fh.textContent="먼저 서식을 적용할 글자를 드래그해서 선택해 주세요.";fh.classList.add("warn");clearTimeout(ht);ht=setTimeout(()=>{fh.textContent=RICH_HINT;fh.classList.remove("warn")},3000)};
+  const edit=fn=>{const a=ta.selectionStart,b=ta.selectionEnd;if(a===b){warn();return}
+    const r=fn(ta.value.slice(a,b)),v=ta.value;ta.value=v.slice(0,a)+r+v.slice(b);ta.focus();ta.setSelectionRange(a,a+r.length);refresh()};
+  const wrap=(o,c)=>edit(t=>o+t+c);
+  root.querySelector(".fbar").addEventListener("mousedown",e=>{if(e.target.closest("button"))e.preventDefault()});   // 선택 영역 유지
+  root.querySelector(".fsz").onchange=e=>{const v=e.target.value;e.target.value="";if(v)wrap(`[크기=${v}]`,"[/크기]")};
+  root.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>wrap(`[색=${b.dataset.c}]`,"[/색]"));
+  root.querySelector(".fcol").onchange=e=>wrap(`[색=${e.target.value}]`,"[/색]");
+  root.querySelector(".fclr").onclick=()=>edit(t=>t.replace(/\[(크기|색)=[^\]\s]{1,12}\]|\[\/(크기|색)\]/g,""));
+  ta.addEventListener("input",refresh);refresh();
+}
+function pgHtml(t){return fmt(t.body,t.imgs)}
 function rPage(t){
   if(t.type==="group"){$("#pagePane").innerHTML=`<div class="bk"><h2>${esc(t.name)}</h2><p class="pg"><span class="hint">이 상위 탭에는 아직 글 탭이 없어요.${edit?" 위의 ‘+ 글 탭 추가’로 만들거나, 다른 자유 글 페이지 탭의 ‘묶기’로 이 탭에 넣어 보세요.":""}</span></p></div>`;return}
   if(t.type!=="page")return;
@@ -469,12 +516,12 @@ async function editPage(id){
   const t=S.tabs.find(x=>x.id===id);if(!t)return;
   const imgs={...(t.imgs||{})};
   const d=$("#fm"),f=$("#fmF");
-  f.innerHTML=`<h2>${esc(`‘${t.name}’ 내용 수정`)}</h2><label>내용<textarea id="pgT" rows="10" maxlength="5000"></textarea></label><div><button type="button" class="btn" id="pgAdd">사진 넣기</button><input type="file" id="pgF" accept="image/*" multiple hidden></div><p class="hint">사진은 커서가 있던 자리에 [사진1] 처럼 들어가요. 이 표시를 옮기면 사진 위치가, 지우면 사진도 함께 빠져요.</p><div class="pgpv" id="pgPv"></div><div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn pri" id="fOk">저장</button></div>`;
-  const ta=$("#pgT");ta.value=t.body||"";
+  f.innerHTML=`<h2>${esc(`‘${t.name}’ 내용 수정`)}</h2>${richHtml("pgT","내용",10)}<div><button type="button" class="btn" id="pgAdd">사진 넣기</button><input type="file" id="pgF" accept="image/*" multiple hidden></div><p class="hint">사진은 커서가 있던 자리에 [사진1] 처럼 들어가요. 이 표시를 옮기면 사진 위치가, 지우면 사진도 함께 빠져요.</p><div class="pgpv" id="pgPv"></div><div class="acts"><button type="button" class="btn" id="fX">취소</button><button type="button" class="btn pri" id="fOk">저장</button></div>`;
+  const ta=$("#pgT");ta.value=t.body||"";wireFmt(ta.closest(".rich"),()=>imgs);
   const used=()=>new Set([...ta.value.matchAll(/\[사진(\d+)\]/g)].map(m=>m[1]).filter(k=>imgs[k]));
   const pv=()=>{$("#pgPv").innerHTML=[...used()].map(k=>`<figure><img src="${imgs[k]}" alt="사진 ${k}"><span>사진${k}</span><br><button type="button" data-k="${k}">빼기</button></figure>`).join("")};
   pv();ta.oninput=pv;
-  $("#pgPv").onclick=e=>{const b=e.target.closest("button[data-k]");if(!b)return;const k=b.dataset.k;ta.value=ta.value.split(`[사진${k}]`).join("").replace(/\n{3,}/g,"\n\n");delete imgs[k];pv()};
+  $("#pgPv").onclick=e=>{const b=e.target.closest("button[data-k]");if(!b)return;const k=b.dataset.k;ta.value=ta.value.split(`[사진${k}]`).join("").replace(/\n{3,}/g,"\n\n");delete imgs[k];ta.dispatchEvent(new Event("input"))};
   $("#pgAdd").onclick=()=>$("#pgF").click();
   $("#pgF").onchange=async e=>{
     const fs=[...e.target.files];e.target.value="";
@@ -485,7 +532,7 @@ async function editPage(id){
         let n=1;while(imgs[n])n++;imgs[n]=data;
         const pos=ta.selectionStart??ta.value.length,a=ta.value.slice(0,pos),b=ta.value.slice(pos);
         const tok=(a&&!a.endsWith("\n")?"\n":"")+`[사진${n}]`+(b.startsWith("\n")?"":"\n");
-        ta.value=a+tok+b;ta.selectionStart=ta.selectionEnd=(a+tok).length;pv()
+        ta.value=a+tok+b;ta.selectionStart=ta.selectionEnd=(a+tok).length;ta.dispatchEvent(new Event("input"))
       }catch(x){msg("이미지를 불러오지 못했어요.")}}
   };
   d.onclose=null;
@@ -505,7 +552,7 @@ async function delTab(id){
 }
 function openWork(id){
   const w=H().works.find(x=>x.id===id);if(!w)return;
-  $("#dlgBody").innerHTML=`<div class="dv">${th(w)}</div><div class="db"><h2>${esc(w.title)}</h2><div class="meta">${esc(catName(w.cat))} · ${esc(w.date)}</div><p>${esc(w.desc||"설명이 없어요.")}</p><div class="acts">${edit?`<button class="btn dng" type="button" data-wdel="${w.id}">삭제</button><button class="btn" type="button" data-wed="${w.id}">수정</button>`:""}<button class="btn pri" type="button" id="cls">닫기</button></div></div>`;
+  $("#dlgBody").innerHTML=`<div class="dv">${th(w)}</div><div class="db"><h2>${esc(w.title)}</h2><div class="meta">${esc(catName(w.cat))} · ${esc(w.date)}</div><p>${w.desc?fmt(w.desc):"설명이 없어요."}</p><div class="acts">${edit?`<button class="btn dng" type="button" data-wdel="${w.id}">삭제</button><button class="btn" type="button" data-wed="${w.id}">수정</button>`:""}<button class="btn pri" type="button" id="cls">닫기</button></div></div>`;
   $("#dlg").showModal();
 }
 
