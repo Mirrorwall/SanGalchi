@@ -1,0 +1,13 @@
+# Netlify 설정
+[build]
+  publish = "."                       # index.html 이 있는 폴더
+  functions = "netlify/functions"     # 저장용 함수(data.mjs)가 있는 폴더
+
+[functions]
+  node_bundler = "esbuild"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

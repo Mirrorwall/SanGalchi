@@ -199,7 +199,7 @@ form.add input:not([type=checkbox]),form.add select,form.add textarea{background
                S.profile 프로필 / S.tabs 메인 탭 목록 (type: notice 공지 · works 작품 게시판 · page 자유 글 · group 상위 탭)
                기본 탭 2개(n, w)의 내용은 S.notices·S.ncats / S.works·S.cats 에,
                새로 만든 탭의 내용은 그 탭 객체 안에 들어 있어요. (현재 탭의 보관소는 H() 가 알려 줘요)
-   2) 흐름     무언가 고치면 → commit() → renderAll() 로 화면을 다시 그리고 + save() 로 GitHub 에 저장
+   2) 흐름     무언가 고치면 → commit() → renderAll() 로 화면을 다시 그리고 + save() 로 저장 (Netlify 또는 GitHub)
    3) 화면     renderAll() 이 현재 탭의 형식에 맞게 rNav / rSub / rProfile / rNotices / rWorks / rPage 를 호출
    4) 입력     form() 이 범용 입력 팝업. 글 작성 도구(서식)는 richHtml()·wireFmt()·fmt()
    5) 클릭     맨 아래 click 이벤트 한 곳에서 버튼의 data-속성으로 동작을 구분해요
@@ -250,6 +250,52 @@ function ss(){try{sessionStorage.setItem("ui",JSON.stringify({edit,pane,cat,view
 /* ---------- 알림 / 저장(게시) ---------- */
 // 화면 아래에 잠깐 뜨는 알림 (3.5초)
 let mt;function msg(t){const m=$("#msg");m.textContent=t;m.hidden=false;clearTimeout(mt);mt=setTimeout(()=>m.hidden=true,3500)}
+/* ---------- 저장 방식 두 가지 (자동 선택) ----------
+   A) Netlify 방식: 사이트와 함께 올린 Netlify Function(/api/data)이 데이터를 Netlify Blobs 에 저장해요.
+      관리자 비밀번호는 Netlify 환경 변수 ADMIN_PASSWORD. 저장하면 방문자 화면에 바로 반영돼요.
+   B) GitHub 방식(기존): data.json 을 GitHub 저장소에 커밋해요. 방문자 화면에는 1~2분 뒤 반영돼요.
+   페이지를 열 때 /api/data 가 응답하면 A, 아니면 B 로 정해요 (GitHub Pages 등에서는 B). */
+const NL_API="/api/data",NL_MAX=5500000;      // Netlify 함수 주소 / 한 번에 저장할 수 있는 최대 크기(바이트)
+let nlMode=false,nlTok=null;                   // nlMode Netlify 방식 여부 / nlTok 로그인한 관리자 비밀번호
+const nlHdr=t=>({"Authorization":"Bearer "+t});
+// 비밀번호 확인 (맞으면 true). 서버에 ADMIN_PASSWORD 가 없으면 code:"nopw" 오류
+async function nlVerify(t){
+  const r=await fetch(NL_API,{method:"POST",headers:nlHdr(t)});
+  if(r.ok)return true;
+  if(r.status===500){const j=await r.json().catch(()=>({}));if(j.error==="no-password")throw Object.assign(new Error("nopw"),{code:"nopw"})}
+  return false}
+// S 전체를 Netlify 에 저장. 너무 크면 code:"big", 비밀번호가 틀리면 code:"auth" 오류
+async function nlSave(){
+  const body=JSON.stringify(S);
+  if(new Blob([body]).size>NL_MAX)throw Object.assign(new Error("big"),{code:"big"});
+  const r=await fetch(NL_API,{method:"PUT",headers:{...nlHdr(nlTok),"Content-Type":"application/json"},body});
+  if(r.status===401)throw Object.assign(new Error("auth"),{code:"auth"});
+  if(r.status===413)throw Object.assign(new Error("big"),{code:"big"});
+  if(!r.ok)throw new Error("save "+r.status)}
+// Netlify 방식 관리자 로그인 (비밀번호 하나만 입력)
+async function loginNl(){
+  let p={token:"",keep:false};
+  for(;;){
+    const v=await form("관리자 로그인",[
+      {t:"msg",v:"Netlify 사이트 설정(환경 변수)에 넣어 둔 관리자 비밀번호(ADMIN_PASSWORD)를 입력해 주세요."},
+      {k:"token",l:"관리자 비밀번호",t:"password",v:p.token,req:1},
+      {k:"keep",t:"check",l:"이 기기에서 로그인 유지 (내 기기에서만 켜세요)",v:p.keep}],"로그인");
+    if(!v)return;p=v;msg("확인 중…");
+    try{
+      if(await nlVerify(v.token)){
+        nlTok=v.token;cfgSet({nl:true,token:v.token},v.keep);admin=true;
+        try{const r=await fetch(NL_API,{cache:"no-store"});if(r.ok)applyData(await r.json())}catch(e){}
+        renderAll();msg("로그인했어요.");return}
+      msg("비밀번호가 맞지 않아요.")
+    }catch(e){msg(e.code==="nopw"?"Netlify 환경 변수 ADMIN_PASSWORD 가 아직 설정되지 않았어요.":"서버에 연결하지 못했어요.")}}}
+// 방문자 화면에 보여 줄 데이터 불러오기. 순서: ① Netlify 에 저장된 데이터 → ② data.json 파일 → ③ 없으면 null(기본 내용)
+// (Netlify 에 아직 저장한 적이 없으면 ②의 data.json 이 첫 내용이 돼요)
+async function loadSite(){
+  try{const r=await fetch(NL_API,{cache:"no-store"});
+    if((r.headers.get("content-type")||"").includes("json")){nlMode=true;if(r.ok)return await r.json()}}catch(e){}
+  try{const r=await fetch(DATA_PATH+"?t="+Date.now(),{cache:"no-store"});if(r.ok)return await r.json()}catch(e){}
+  return null}
+
 /* ---------- GitHub 연결 (data.json 을 저장소에 커밋) ---------- */
 // data.json 의 위치와 GitHub API 주소
 const DATA_PATH="data.json",API="https://api.github.com";
@@ -302,12 +348,13 @@ async function ghSave(retry){
 let st,q=Promise.resolve();
 // 저장 예약 (관리자로 로그인했을 때만)
 function save(){
-  if(!admin||!gh){msg("관리자로 로그인해야 저장할 수 있어요.");return}
+  if(!admin||(!gh&&!nlTok)){msg("관리자로 로그인해야 저장할 수 있어요.");return}
   clearTimeout(st);st=setTimeout(()=>{q=q.then(async()=>{
-    try{msg("저장 중…");await ghSave();ss();msg("저장했어요. 방문자 화면에는 1~2분 뒤 반영돼요.")}
-    catch(e){msg(e.code==="auth"?"저장 권한이 없어요. 토큰 권한(Contents: Read and write)을 확인하고 다시 로그인해 주세요.":"저장하지 못했어요. 잠시 후 다시 시도해 주세요.")}})},500)}
+    try{msg("저장 중…");await(nlMode?nlSave():ghSave());ss();msg(nlMode?"저장했어요. 방문자 화면에 바로 반영돼요.":"저장했어요. 방문자 화면에는 1~2분 뒤 반영돼요.")}
+    catch(e){msg(e.code==="auth"?(nlMode?"비밀번호가 맞지 않아요. 다시 로그인해 주세요.":"저장 권한이 없어요. 토큰 권한(Contents: Read and write)을 확인하고 다시 로그인해 주세요."):e.code==="big"?"저장 용량(약 5MB)을 넘었어요. 사진을 줄이거나 일부를 삭제해 주세요.":"저장하지 못했어요. 잠시 후 다시 시도해 주세요.")}})},500)}
 // 관리자 로그인: 정보를 받아 쓰기 권한을 확인하고, 성공하면 최신 data.json 을 불러와요. 실패하면 입력창을 다시 보여 줘요
 async function login(){
+  if(nlMode)return loginNl();   // Netlify 방식이면 비밀번호 로그인
   const g=guessRepo();let p={owner:g.owner,repo:g.repo,branch:"",token:"",keep:false};
   for(;;){
     const v=await form("관리자 로그인",[
@@ -327,7 +374,7 @@ async function login(){
       msg("저장소를 찾을 수 없거나 쓰기 권한이 없어요. 입력을 확인해 주세요.")
     }catch(e){msg("GitHub에 연결하지 못했어요.")}}}
 // 로그아웃: 저장된 로그인 정보를 지우고 편집 모드를 꺼요
-function logout(){cfgClear();gh=null;sha=null;admin=false;edit=false;ss();renderAll();msg("로그아웃했어요.")}
+function logout(){cfgClear();gh=null;sha=null;nlTok=null;admin=false;edit=false;ss();renderAll();msg("로그아웃했어요.")}
 // 데이터를 고친 뒤에는 항상 이걸 호출해요: 화면 다시 그리기 + 저장
 function commit(){renderAll();save()}
 
@@ -410,7 +457,7 @@ function rProfile(){
   $("#av").innerHTML=p.avatar?`<img src="${p.avatar}" alt="프로필 사진">`:art(99,215);
   $("#adm").hidden=!admin;$("#loginB").hidden=admin;
   $("#editT").textContent=edit?"편집 모드 끄기":"편집 모드 켜기";
-  $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 🔗 버튼으로 항목에 링크도 연결할 수 있어요. 저장하면 GitHub에 반영되고, 방문자 화면에는 1~2분 뒤 보여요.":"관리자만 보이는 메뉴예요.";
+  $("#admHint").textContent=edit?"글자를 직접 고치거나 사진을 눌러 바꿀 수 있어요. 🔗 버튼으로 항목에 링크도 연결할 수 있어요. 저장하면 "+(nlMode?"방문자 화면에 바로 반영돼요.":"GitHub에 반영되고, 방문자 화면에는 1~2분 뒤 보여요."):"관리자만 보이는 메뉴예요.";
 }
 // 공지사항 형식 탭 그리기: 분류 탭 + 공지 목록 (중요 공지가 맨 위, 그 아래는 최신순)
 function rNotices(){
@@ -768,12 +815,15 @@ const cs=(v,n)=>typeof v==="string"?v.slice(0,n):"";                         // 
 // 먼저 기본 데이터로 한 번 그린 뒤, 저장소의 data.json 을 불러오면 다시 그려요
 renderAll();
 (async()=>{
-  /* 방문자 화면: 저장소의 data.json 을 불러옵니다 (없으면 기본 내용) */
-  try{const r=await fetch(DATA_PATH+"?t="+Date.now(),{cache:"no-store"});if(r.ok)applyData(await r.json())}catch(e){}
+  /* 방문자 화면: 저장된 데이터를 불러옵니다 (없으면 기본 내용) */
+  try{const d=await loadSite();if(d)applyData(d)}catch(e){}
   renderAll();
   /* 저장된 로그인이 있으면 자동으로 관리자 복구 */
   const c=cfgGet();
-  if(c){try{if(await verify(c)){gh=c;admin=true;const d=await ghLoad();if(d)applyData(d)}else cfgClear()}catch(e){}}
+  if(c){try{
+    if(c.nl&&nlMode){if(await nlVerify(c.token)){nlTok=c.token;admin=true}else cfgClear()}                                   // Netlify 방식
+    else if(!c.nl&&!nlMode){if(await verify(c)){gh=c;admin=true;const d=await ghLoad();if(d)applyData(d)}else cfgClear()}   // GitHub 방식
+  }catch(e){}}
   if(!admin)edit=false;
   renderAll();
 })();
